@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package wxrbt;
+option go_package=".;wxrbt";
+
+
+message SignatureRequest{
+
+}
+
+message SignatureResponse{
+
+}
+
+service WechatManagerService {
+    //验签接口
+    rpc Signature(SignatureRequest) returns (SignatureResponse) {} 
+}
