@@ -6,6 +6,8 @@ services:
     command: redis-sentinel /usr/local/etc/redis/sentinel.conf
     restart: always
     #network_mode: "host"
+    ports:
+      - 26379:26379
     volumes:
       - ./sentinel1.conf:/usr/local/etc/redis/sentinel.conf
 
@@ -15,6 +17,8 @@ services:
     command: redis-sentinel /usr/local/etc/redis/sentinel.conf
     restart: always
     #network_mode: "host"
+    ports:
+      - 26380:26379
     volumes:
       - ./sentinel2.conf:/usr/local/etc/redis/sentinel.conf
 
@@ -24,5 +28,7 @@ services:
     command: redis-sentinel /usr/local/etc/redis/sentinel.conf
     restart: always
     #network_mode: "host"
+    ports:
+      - 26381:26379
     volumes:
       - ./sentinel3.conf:/usr/local/etc/redis/sentinel.conf
