@@ -1,17 +1,27 @@
 package wxmanager
 
 import (
+	"wxrobot/internal/app/common"
+	"wxrobot/internal/pkg/middleware"
+
 	"github.com/gin-gonic/gin"
 )
 
 type WxManager struct {
 }
 
-func InitManger() {
+func NewWxMangerRouter() *gin.Engine {
 	r := gin.Default()
+	r.Use(middleware.Cors())
 
-	r.Use(SignatureMiddleware)
-	r.GET("/home", Signature)
-	r.POST("/home", RecvMessage)
+	initSignature(r)
+	return r
+}
+
+func InitManger() {
+	common.Initconfig()
+	common.InitLogger()
+
+	r := NewWxMangerRouter()
 	r.Run(":80")
 }

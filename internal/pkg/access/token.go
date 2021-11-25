@@ -3,6 +3,7 @@ package access
 import (
 	"encoding/json"
 	"fmt"
+	"time"
 	"wxrobot/internal/app/common"
 	"wxrobot/internal/app/utils"
 
@@ -13,14 +14,18 @@ import (
 //GetAccessToken Success, token:51_KBIJELcopd5RHT8t5o6uOPDeg8ARFW4FBKyRvNmY4Xt3E0H6R4bnnKNCcE_T51gDDF8XpE5qierFKzMcJPD-x_xewH7l4-CgUa0XoDxIRsZ2IsKaNsj3VWRe0xlCAqx8LIPETiKkcmYW_QIaWRXfAAADYE
 //expire:7200
 
-func GetAccessToken() (token string, expireTime int, err error) {
+const (
+	kWxAkRediskey = "WxAccessToken"
+)
+
+func getAccessToken() (token string, expireTime int, err error) {
 	type Model struct {
 		Token  string `json:"access_token"`
 		Expire int    `json:"expires_in"`
 	}
-	appid := viper.GetString(common.CFG_APPID)
-	appsecret := viper.GetString(common.CFG_APPSECRET)
-	host := viper.GetString(common.CFG_ACS_TOKEN_URL)
+	appid := viper.GetString(common.CFG_SECRET_APPID)
+	appsecret := viper.GetString(common.CFG_SECRET_APPSECRET)
+	host := viper.GetString(common.CFG_URL_ACS_TOKEN)
 	url := fmt.Sprintf("%s?grant_type=client_credential&appid=%s&secret=%s", host, appid, appsecret)
 	log.Info("url:", url)
 	resp, err := utils.HttpGet(url)
@@ -37,7 +42,46 @@ func GetAccessToken() (token string, expireTime int, err error) {
 	token = m.Token
 	expireTime = m.Expire
 	log.Info("GetAccessToken Success, token:", token, " expire:", expireTime)
+	return
+}
 
-	//写到redis缓存里面
+//export
+func GetAccessToken() (token string, err error) {
+	rdb, err := common.GetRedisClient()
+	if err != nil {
+		log.Warn("init redis failed, err=", err)
+		return
+	}
+
+	isExist, err := rdb.Exists(kWxAkRediskey).Result()
+	if err != nil {
+		return
+	}
+	if isExist {
+		leavetime, err1 := rdb.TTL(kWxAkRediskey).Result()
+		if err1 != nil {
+			err1 = err
+			return
+		}
+		//提前10分钟获取
+		if leavetime >= time.Minute*10 {
+			acsToken, err2 := rdb.Get(kWxAkRediskey).Result()
+			if err2 != nil {
+				err = err2
+				return
+			}
+			token = acsToken
+			return
+		}
+	}
+
+	token, expire, err := getAccessToken()
+	if err != nil {
+		return
+	}
+	err = rdb.Set(kWxAkRediskey, token, time.Second*time.Duration(expire)).Err()
+	if err != nil {
+		return
+	}
 	return
 }
