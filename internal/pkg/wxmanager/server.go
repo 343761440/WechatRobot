@@ -19,6 +19,7 @@ type WxManager struct {
 func NewWxMangerRouter() *gin.Engine {
 	r := gin.Default()
 	r.Use(middleware.Cors())
+	r.Use(middleware.WhiteListCheck())
 
 	initSignature(r)
 	return r

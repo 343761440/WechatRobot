@@ -81,7 +81,7 @@ func InitDB(debug, singularTable bool) (*gorm.DB, error) {
 	}
 
 	if mysqlCfg := cfg.Section("MYSQL"); len(mysqlCfg.Keys()) > 0 { // 优先使用MYSQL
-		log.Printf("using database mysql: %+v", mysqlCfg)
+		//log.Printf("using database mysql: %+v", mysqlCfg)
 		opts := []DBOption{MysqlOptions(&MySQLOptions{
 			User:     mysqlCfg.Key("UserName").String(),
 			Password: mysqlCfg.Key("Pwd").String(),

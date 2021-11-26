@@ -3,6 +3,7 @@ package middleware
 import (
 	"crypto/sha1"
 	"encoding/hex"
+	"net/http"
 	"sort"
 	"wxrobot/internal/app/common"
 
@@ -35,7 +36,7 @@ func SignatureMiddleware(c *gin.Context) {
 	if sha1String == sign {
 		c.Next()
 	} else {
-		c.JSON(401, gin.H{"msg": "signature failed"})
+		c.Status(http.StatusUnauthorized)
 		c.Abort()
 	}
 }

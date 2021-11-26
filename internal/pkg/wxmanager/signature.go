@@ -1,6 +1,7 @@
 package wxmanager
 
 import (
+	"wxrobot/internal/pkg/message"
 	"wxrobot/internal/pkg/middleware"
 
 	"github.com/gin-gonic/gin"
@@ -17,7 +18,8 @@ func initSignature(r *gin.Engine) {
 		sign := g.Group("/")
 		sign.Use(middleware.SignatureMiddleware)
 		{
-			sign.GET("wechat", Signature)
+			sign.GET("home", Signature)
+			sign.POST("home", message.HandleMessage)
 		}
 	}
 }
