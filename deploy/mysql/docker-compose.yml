@@ -1,0 +1,18 @@
+version: '3'
+services:
+    mysql:
+        container_name: mysql
+        #network_mode: "host"
+        environment:
+            MYSQL_ROOT_PASSWORD: "miyawaki"
+            MYSQL_USER: 'sakura'
+            MYSQL_PASSWORD: 'kdf82dhsx'
+        image: "mysql:5.7"
+        restart: always
+        volumes:
+            - "./db:/var/lib/mysql"
+            - "./conf/my.cnf:/etc/my.cnf"
+            - "./init:/docker-entrypoint-initdb.d/"
+        ports:
+            - "3306:3306"
+        command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
