@@ -2,31 +2,12 @@ package message
 
 import (
 	"encoding/xml"
+	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
 )
-
-type MessageType string
-
-const (
-	TEXT_MESSAGE        MessageType = "text"
-	IMAGE_MESSAGE       MessageType = "image"
-	VOICE_MESSAGE       MessageType = "voice"
-	VIDEO_MESSAGE       MessageType = "video"
-	SHORT_VIDEO_MESSAGE MessageType = "shortvideo"
-	LOCATION_MESSAGE    MessageType = "location"
-	LINK_MESSAGE        MessageType = "link"
-)
-
-type MessageCommon struct {
-	XMLName      xml.Name    `xml:"xml"` // 指定最外层的标签为config
-	ToUserName   string      `xml:"ToUserName"`
-	FromUserName string      `xml:"FromUserName"`
-	CreateTime   int64       `xml:"CreateTime"`
-	MsgType      MessageType `xml:"MsgType"`
-	MsgId        int64       `xml:"MsgId"`
-}
 
 type TextMessage struct {
 	MessageCommon
@@ -73,27 +54,44 @@ type LinkMessage struct {
 	Url         string
 }
 
-func HandleMessage(c *gin.Context) {
-	log.Info("request:", c.Request)
-	// bodyReader, err := c.Request.GetBody()
-	// if err != nil {
-	// 	log.Info("get body failed,err=", err)
-	// 	c.XML(500, "")
-	// 	return
-	// }
-
-	// body, _ := ioutil.ReadAll(bodyReader)
-	// log.Info("body:", body)
+func handleTextMessage(c *gin.Context, body []byte) {
+	log.Info("handleTextMessage")
 	msg := TextMessage{}
-	c.BindXML(&msg)
-	log.Info("msg:", msg)
+	err := xml.Unmarshal(body, &msg)
+	if err != nil {
+		log.Error("handleTextMessage err:", err)
+		c.AbortWithStatus(http.StatusBadRequest)
+		return
+	}
 
 	rspmsg := TextMessage{
-		Content: "hello",
+		Content: "你好，很高兴认识你",
 		MessageCommon: MessageCommon{
 			ToUserName:   msg.FromUserName,
 			FromUserName: msg.ToUserName,
-			CreateTime:   msg.CreateTime + 1,
+			CreateTime:   time.Now().Unix(),
+			MsgType:      TEXT_MESSAGE,
+		},
+	}
+	c.XML(200, rspmsg)
+}
+
+func handleImageMessage(c *gin.Context, body []byte) {
+	log.Info("handleTextMessage")
+	msg := ImageMessage{}
+	err := xml.Unmarshal(body, &msg)
+	if err != nil {
+		log.Error("handleTextMessage err:", err)
+		c.AbortWithStatus(http.StatusBadRequest)
+		return
+	}
+
+	rspmsg := TextMessage{
+		Content: "图片很好看，我先收藏了",
+		MessageCommon: MessageCommon{
+			ToUserName:   msg.FromUserName,
+			FromUserName: msg.ToUserName,
+			CreateTime:   time.Now().Unix(),
 			MsgType:      TEXT_MESSAGE,
 		},
 	}
