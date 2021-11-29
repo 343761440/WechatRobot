@@ -19,7 +19,7 @@ func initSignature(r *gin.Engine) {
 		sign.Use(middleware.SignatureMiddleware)
 		{
 			sign.GET("home", Signature)
-			sign.POST("home", message.HandleMessage)
+			sign.POST("home", message.CommonMessageProxy)
 		}
 	}
 }

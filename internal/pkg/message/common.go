@@ -4,9 +4,14 @@ import (
 	"encoding/xml"
 	"io/ioutil"
 	"net/http"
+	"wxrobot/internal/pkg/model"
 
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
+)
+
+const (
+	kCtxUserKey = "user"
 )
 
 type MessageType string
@@ -28,7 +33,6 @@ type MessageCommon struct {
 	FromUserName string      `xml:"FromUserName"`
 	CreateTime   int64       `xml:"CreateTime"`
 	MsgType      MessageType `xml:"MsgType"`
-	MsgId        int64       `xml:"MsgId"`
 }
 
 var gMsgHandler = map[MessageType]func(c *gin.Context, body []byte){
@@ -37,16 +41,10 @@ var gMsgHandler = map[MessageType]func(c *gin.Context, body []byte){
 	EVENT_MESSAGE: handleEventMessage,
 }
 
-func proxyMessage(c *gin.Context, body []byte, mtype MessageType) {
-	handleCb := gMsgHandler[mtype]
-	handleCb(c, body)
-}
-
-func HandleMessage(c *gin.Context) {
+func CommonMessageProxy(c *gin.Context) {
 	log.Debug("request:", c.Request)
 
 	body, _ := ioutil.ReadAll(c.Request.Body)
-
 	msg := MessageCommon{}
 	err := xml.Unmarshal(body, &msg)
 	if err != nil {
@@ -54,6 +52,19 @@ func HandleMessage(c *gin.Context) {
 		c.AbortWithStatus(http.StatusBadRequest)
 		return
 	}
+	wxUser, err := model.GetWxUser(msg.FromUserName)
+	if err == nil {
+		c.Set(kCtxUserKey, wxUser)
+	}
+	handleCb := gMsgHandler[msg.MsgType]
+	handleCb(c, body)
+}
 
-	proxyMessage(c, body, msg.MsgType)
+func GetWxUserFromCtx(c *gin.Context) *model.WxUser {
+	if v, _ := c.Get(kCtxUserKey); v != nil {
+		if user, ok := v.(*model.WxUser); ok {
+			return user
+		}
+	}
+	return nil
 }
