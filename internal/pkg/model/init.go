@@ -30,7 +30,7 @@ func init() {
 		log.Fatal("init db failed,err=", err)
 	}
 	//更新需要的数据表
-	if err := db.Set("gorm:table_options", "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;").AutoMigrate(&WxUser{}); err != nil {
+	if err := db.Set("gorm:table_options", "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;").AutoMigrate(&WxUser{}, &Question{}); err != nil {
 		log.Fatal("database init model error ", err)
 		return
 	}

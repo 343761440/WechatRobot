@@ -61,12 +61,12 @@ type LinkMessage struct {
 	MsgId       int64  `xml:"MsgId"`
 }
 
-func NewTextMessage(content, to, from string) TextMessage {
+func NewTextMessage(content string, c *gin.Context) TextMessage {
 	return TextMessage{
 		Content: content,
 		MessageCommon: MessageCommon{
-			ToUserName:   to,
-			FromUserName: from,
+			ToUserName:   GetUserIdFromCtx(c),
+			FromUserName: GetFromUserIdFromCtx(c),
 			CreateTime:   time.Now().Unix(),
 			MsgType:      TEXT_MESSAGE,
 		},
@@ -82,21 +82,7 @@ func handleTextMessage(c *gin.Context, body []byte) {
 		c.AbortWithStatus(http.StatusBadRequest)
 		return
 	}
-	wxUser := GetWxUserFromCtx(c)
-	nickName := ""
-	if wxUser != nil {
-		nickName = wxUser.NickName
-	}
-	rspmsg := TextMessage{
-		Content: nickName + "你好，很高兴认识你",
-		MessageCommon: MessageCommon{
-			ToUserName:   msg.FromUserName,
-			FromUserName: msg.ToUserName,
-			CreateTime:   time.Now().Unix(),
-			MsgType:      TEXT_MESSAGE,
-		},
-	}
-	c.XML(200, rspmsg)
+	HandleLogicMessage(c, msg.Content)
 }
 
 func handleImageMessage(c *gin.Context, body []byte) {

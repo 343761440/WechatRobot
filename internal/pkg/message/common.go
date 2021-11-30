@@ -11,7 +11,9 @@ import (
 )
 
 const (
-	kCtxUserKey = "user"
+	kCtxUserKey    = "user"
+	kCtxUserId     = "userId"
+	kCtxFromUserId = "fromUserId"
 )
 
 type MessageType string
@@ -52,6 +54,8 @@ func CommonMessageProxy(c *gin.Context) {
 		c.AbortWithStatus(http.StatusBadRequest)
 		return
 	}
+	c.Set(kCtxUserId, msg.FromUserName)
+	c.Set(kCtxFromUserId, msg.ToUserName)
 	wxUser, err := model.GetWxUser(msg.FromUserName)
 	if err == nil {
 		c.Set(kCtxUserKey, wxUser)
@@ -67,4 +71,21 @@ func GetWxUserFromCtx(c *gin.Context) *model.WxUser {
 		}
 	}
 	return nil
+}
+
+func getKeyFromCtx(c *gin.Context, key string) string {
+	if v, _ := c.Get(key); v != nil {
+		if vstr, ok := v.(string); ok {
+			return vstr
+		}
+	}
+	return ""
+}
+
+func GetUserIdFromCtx(c *gin.Context) string {
+	return getKeyFromCtx(c, kCtxUserId)
+}
+
+func GetFromUserIdFromCtx(c *gin.Context) string {
+	return getKeyFromCtx(c, kCtxFromUserId)
 }

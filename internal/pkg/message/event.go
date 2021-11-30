@@ -47,10 +47,35 @@ func handleEventMessage(c *gin.Context, body []byte) {
 func handleSubscribeEvent(c *gin.Context, event EventCommon) {
 	log.Info("handleSubscribeEvent")
 	log.Info("userId:", event.FromUserName)
-	if err := model.CreateWxUser(event.FromUserName); err != nil {
-		log.Warn("CreateUser failed, err=", err)
+
+	userName := ""
+	wxUser, _ := model.GetWxUser(event.FromUserName)
+	if wxUser != nil {
+		userName = wxUser.NickName
+	} else {
+		nextUser := getNextUser()
+		userType := model.USER_NORMAL
+		if nextUser != nil {
+			log.Info("Get Next User Success:", nextUser)
+			userName = nextUser.NickName
+			userType = nextUser.UserType
+		}
+		user := model.WxUser{
+			NickName: userName,
+			UserId:   event.FromUserName,
+			UserType: userType,
+		}
+		if err := model.CreateWxUser(&user); err != nil {
+			log.Warn("CreateUser failed, err=", err)
+		}
 	}
-	c.XML(200, NewTextMessage("白茶清欢无别事，我在等风也等你", event.FromUserName, event.ToUserName))
+
+	content := "白茶清欢无别事，我在等风也等你"
+	if len(userName) > 0 {
+		content += "\n"
+		content += "终于等到你了 " + userName
+	}
+	c.XML(200, NewTextMessage(content, c))
 }
 
 func handleUnSubscribeEvent(c *gin.Context, event EventCommon) {
