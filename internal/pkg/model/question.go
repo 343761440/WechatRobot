@@ -28,3 +28,9 @@ func GetQuestion(questionId string) (*Question, error) {
 	}
 	return &q, nil
 }
+
+func CreateQuestions(quesList []Question) error {
+	return GetInstance().db.Transaction(func(tx *gorm.DB) error {
+		return tx.Create(quesList).Error
+	})
+}
