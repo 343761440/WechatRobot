@@ -39,7 +39,7 @@ func Error(args ...interface{}) {
 func ErrorWithRecord(args ...interface{}) {
 	logrus.Error(args...)
 	gError.Lock()
-	gError.errorInfo = time.Now().Format("2006-01-01") + ":" + fmt.Sprint(args...)
+	gError.errorInfo = time.Now().Format("2006-01-02 15:04:05") + "\n" + fmt.Sprint(args...)
 	gError.Unlock()
 }
 

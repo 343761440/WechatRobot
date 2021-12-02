@@ -202,11 +202,13 @@ func todoListHandler(c *gin.Context, args ...string) {
 				}
 				return
 			} else {
+				log.ErrorWithRecord("add todo failed by wrong format, msg=", cmd)
 				c.XML(http.StatusOK, NewTextMessage("正确格式：21 待做事项 (21与待做事项间的空格不要漏哦)", c))
 				return
 			}
 		}
 	}
+	log.ErrorWithRecord("todoListHandler unknow message, msg=", cmd)
 	c.XML(http.StatusOK, NewTextMessage("o(╥﹏╥)o我当前还无法消化这个信息", c))
 }
 
