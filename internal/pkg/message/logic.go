@@ -3,11 +3,14 @@ package message
 import (
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"net/http"
 	"sort"
 	"strings"
 	"sync"
+	"wxrobot/internal/app/common"
 	"wxrobot/internal/app/utils"
+	"wxrobot/internal/pkg/log"
 	"wxrobot/internal/pkg/model"
 
 	"github.com/gin-gonic/gin"
@@ -16,9 +19,9 @@ import (
 
 /*
  业务逻辑控制主要在这个文件
- 1、管理员命名新用户
-	1.1 管理员获取所有userId
-	1.2 管理员设置人员类型
+ 1、小林同学命名新用户
+	1.1 小林同学获取所有userId
+	1.2 小林同学设置人员类型
 	1.3
  2、重要人的QA
  3、和重要人的待完成事项
@@ -45,14 +48,15 @@ type KeyWordInfo struct {
 var (
 	gRootHandlers = map[string]KeyWordHandle{
 		"new": newUserHandler,
+		"err": lastErrorHandler,
 	}
 	gImportantHandler = map[string]KeyWordInfo{
 		"1": {"真心话环节", qaHandler},
-		"2": {"大冒险环节", todoListHandler},
-		"3": {"最近天气", weatherHandler},
+		"2": {"要做的xx件事", todoListHandler},
+		"3": {"实时天气", weatherHandler},
 		"4": {"电影推荐", movieRecoHandler},
-		"5": {"歌曲推荐", musicRecoHandler},
-		"6": {"今日冷笑话", codejokeHandler},
+		"5": {"最近在听", musicRecoHandler},
+		"6": {"今日份冷笑话", coldjokeHandler},
 	}
 	gNextUser = NextUser{}
 	gUserType = map[string]int{
@@ -80,7 +84,6 @@ func newUserHandler(c *gin.Context, args ...string) {
 		c.XML(http.StatusOK, NewTextMessage("格式输入有误，正确格式：new username userType", c))
 		return
 	}
-
 	utype, ok := matchUserType(args[1])
 	if !ok {
 		c.XML(http.StatusOK, NewTextMessage("无法识别的userType", c))
@@ -88,10 +91,17 @@ func newUserHandler(c *gin.Context, args ...string) {
 	}
 
 	userName := args[0]
-
 	gNextUser.NextName = userName
 	gNextUser.UserType = utype
 	c.XML(http.StatusOK, NewTextMessage(args[1]+"用户设置成功", c))
+}
+
+func lastErrorHandler(c *gin.Context, args ...string) {
+	lasterr := log.GetLastError()
+	if len(lasterr) == 0 {
+		lasterr = "NoError"
+	}
+	c.XML(http.StatusOK, NewTextMessage(lasterr, c))
 }
 
 func getNextUser() *model.WxUser {
@@ -110,12 +120,14 @@ func getNextUser() *model.WxUser {
 	}
 }
 
+//TODO:每天只能看5个
 func qaHandler(c *gin.Context, args ...string) {
 	cmd := args[0]
 	if cmd == "1" {
 		qlist, err := model.ListQuestions()
 		if err != nil {
-			c.XML(http.StatusOK, NewTextMessage("抱歉，目前出了点状况，请联系管理员", c))
+			log.ErrorWithRecord("ListQuestions failed, err=", err)
+			c.XML(http.StatusOK, NewTextMessage("抱歉，目前出了点状况，请联系小林同学", c))
 			return
 		}
 		if len(qlist) == 0 {
@@ -146,7 +158,8 @@ func todoListHandler(c *gin.Context, args ...string) {
 	if cmd == "2" {
 		todolist, err := model.ListTodoItems(model.TODO_ALL)
 		if err != nil {
-			c.XML(http.StatusOK, NewTextMessage("抱歉，目前出了点状况，请联系管理员", c))
+			log.ErrorWithRecord("ListTodoItems failed, err=", err)
+			c.XML(http.StatusOK, NewTextMessage("抱歉，目前出了点状况，请联系小林同学", c))
 			return
 		}
 		if len(todolist) == 0 {
@@ -182,7 +195,8 @@ func todoListHandler(c *gin.Context, args ...string) {
 					info += substrs[i] + " "
 				}
 				if err := model.CreateTodoItems(model.TodoItem{ItemInfo: info}); err != nil {
-					c.XML(http.StatusOK, NewTextMessage("我暂时出了点问题，请联系一下管理员", c))
+					log.ErrorWithRecord("CreateTodoItems failed, err=", err)
+					c.XML(http.StatusOK, NewTextMessage("我暂时出了点问题，请联系一下小林同学", c))
 				} else {
 					c.XML(http.StatusOK, NewTextMessage("增加到待做清单成功！", c))
 				}
@@ -219,37 +233,37 @@ func weatherHandler(c *gin.Context, args ...string) {
 		Lives    []Lives `json:"lives"`
 	}
 
-	//默认滨江区
-	// 	杭州市	330100
+	// 默认滨江区
+	// 杭州市		330100
 	// 杭州市市辖区	330101
-	// 上城区	330102
-	// 下城区	330103
-	// 江干区	330104
-	// 拱墅区	330105
-	// 西湖区	330106
-	// 滨江区	330108
-	// 萧山区	330109
-	// 余杭区	330110
+	// 上城区		330102
+	// 下城区		330103
+	// 江干区		330104
+	// 拱墅区		330105
+	// 西湖区		330106
+	// 滨江区		330108
+	// 萧山区		330109
+	// 余杭区		330110
 	url := fmt.Sprintf(urlformat, "d1c4ce5567b24fee573915a2d3d8110e", 330108)
 	resp, err := utils.HttpGet(url)
 	if err != nil {
-		logrus.Error("HttpGet failed, err=", err)
-		c.XML(http.StatusOK, NewTextMessage("我暂时出了点问题，请联系一下管理员~", c))
+		log.ErrorWithRecord("weather HttpGet failed, err=", err)
+		c.XML(http.StatusOK, NewTextMessage("我暂时出了点问题，请联系一下小林同学~", c))
 		return
 	}
 
 	var result Result
 	err = json.Unmarshal(resp, &result)
 	if err != nil {
-		logrus.Error("json unmarshal failed, err=", err, " res:", string(resp))
-		c.XML(http.StatusOK, NewTextMessage("我暂时出了点问题，请联系一下管理员~", c))
+		log.ErrorWithRecord("weather json unmarshal failed, err=", err, " res:", string(resp))
+		c.XML(http.StatusOK, NewTextMessage("我暂时出了点问题，请联系一下小林同学~", c))
 		return
 	}
 
 	logrus.Info("result:", result)
 
 	if result.InfoCode != "10000" {
-		c.XML(http.StatusOK, NewTextMessage("我暂时出了点问题，请联系一下管理员~", c))
+		c.XML(http.StatusOK, NewTextMessage("我暂时出了点问题，请联系一下小林同学~", c))
 		return
 	}
 
@@ -261,18 +275,84 @@ func weatherHandler(c *gin.Context, args ...string) {
 	content += "风力级别：" + result.Lives[0].Windpower + "级\n"
 	content += "\n- - - - - - - - - - - - - - - - - - - - \n"
 	content += "发布时间：" + result.Lives[0].Reporttime + "\n"
+
+	//得加一些文案，表示提醒，例如升温，降温等
 	c.XML(http.StatusOK, NewTextMessage(content, c))
 }
 
-func movieRecoHandler(c *gin.Context, args ...string) {
+func getGlobalMovieIncrbyNum() (int64, error) {
+	rdb, err := common.GetRedisClient()
+	if err != nil {
+		return 0, err
+	}
 
+	key := "movieGloabNum"
+	num, err := rdb.Incr(key).Result()
+	if err != nil {
+		return 0, err
+	}
+	return num, nil
+}
+
+func movieRecoHandler(c *gin.Context, args ...string) {
+	type Data struct {
+		ID          string `json:"id"`
+		Poster      string `json:"poster"`
+		Name        string `json:"name"`
+		Genre       string `json:"genre"`
+		Description string `json:"description"`
+		Language    string `json:"language"`
+		Country     string `json:"country"`
+		Lang        string `json:"lang"`
+		Movie       string `json:"movie"`
+	}
+
+	type Object struct {
+		Datas      []Data `json:"data"`
+		OriginName string `json:"originalName"`
+		DoubanRate string `json:"doubanRating"`
+		Alias      string `json:"alias"`
+		Year       string `json:"year"`
+	}
+
+	urlformat := "https://api.wmdb.tv/api/v1/top?type=Douban&skip=%d&limit=1&lang=Cn"
+	num, err := getGlobalMovieIncrbyNum()
+	if err != nil {
+		log.ErrorWithRecord("getGlobalMovieIncrbyNum failed,err=", err)
+		num = int64(rand.Intn(1000) + 1)
+	}
+
+	url := fmt.Sprintf(urlformat, num)
+	resp, err := utils.HttpGet(url)
+	if err != nil {
+		log.ErrorWithRecord("HttpGet movie failed, err=", err, " res:", string(resp))
+		c.XML(http.StatusOK, NewTextMessage("我暂时出了点问题，请联系一下小林同学~", c))
+		return
+	}
+
+	var objects []Object
+	err = json.Unmarshal(resp, &objects)
+	if err != nil {
+		log.ErrorWithRecord("Unmarshal movie failed, err=", err, " res:", string(resp))
+		c.XML(http.StatusOK, NewTextMessage("我暂时出了点问题，请联系一下小林同学~", c))
+		return
+	}
+	movie := objects[0]
+	content := "电影名：《" + movie.Datas[0].Name + "》\n"
+	content += "类型：" + movie.Datas[0].Genre + "\n"
+	content += "语言：" + movie.Datas[0].Language + "\n"
+	content += "国家：" + movie.Datas[0].Country + "\n"
+	content += "海报：" + movie.Datas[0].Poster + "\n"
+	content += "豆瓣评分：" + movie.DoubanRate + "\n"
+	content += "影片概要：" + movie.Datas[0].Description + "\n"
+	c.XML(http.StatusOK, NewTextMessage(content, c))
 }
 
 func musicRecoHandler(c *gin.Context, args ...string) {
 
 }
 
-func codejokeHandler(c *gin.Context, args ...string) {
+func coldjokeHandler(c *gin.Context, args ...string) {
 
 }
 

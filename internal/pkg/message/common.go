@@ -3,7 +3,9 @@ package message
 import (
 	"encoding/xml"
 	"io/ioutil"
+	"math/rand"
 	"net/http"
+	"time"
 	"wxrobot/internal/pkg/model"
 
 	"github.com/gin-gonic/gin"
@@ -41,6 +43,10 @@ var gMsgHandler = map[MessageType]func(c *gin.Context, body []byte){
 	TEXT_MESSAGE:  handleTextMessage,
 	IMAGE_MESSAGE: handleImageMessage,
 	EVENT_MESSAGE: handleEventMessage,
+}
+
+func init() {
+	rand.Seed(time.Now().Unix())
 }
 
 func CommonMessageProxy(c *gin.Context) {
