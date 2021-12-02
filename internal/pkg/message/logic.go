@@ -1,13 +1,17 @@
 package message
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 	"sync"
+	"wxrobot/internal/app/utils"
 	"wxrobot/internal/pkg/model"
 
 	"github.com/gin-gonic/gin"
+	"github.com/sirupsen/logrus"
 )
 
 /*
@@ -45,6 +49,10 @@ var (
 	gImportantHandler = map[string]KeyWordInfo{
 		"1": {"真心话环节", qaHandler},
 		"2": {"大冒险环节", todoListHandler},
+		"3": {"最近天气", weatherHandler},
+		"4": {"电影推荐", movieRecoHandler},
+		"5": {"歌曲推荐", musicRecoHandler},
+		"6": {"今日冷笑话", codejokeHandler},
 	}
 	gNextUser = NextUser{}
 	gUserType = map[string]int{
@@ -188,6 +196,86 @@ func todoListHandler(c *gin.Context, args ...string) {
 	c.XML(http.StatusOK, NewTextMessage("o(╥﹏╥)o我当前还无法消化这个信息", c))
 }
 
+func weatherHandler(c *gin.Context, args ...string) {
+	urlformat := "https://restapi.amap.com/v3/weather/weatherInfo?key=%s&city=%d&extensions=base"
+
+	type Lives struct {
+		Province      string `json:"province"`
+		City          string `json:"city"`
+		Adcode        string `json:"adcode"`
+		Weather       string `json:"weather"`
+		Temperature   string `json:"temperature"`
+		Winddirection string `json:"winddirection"`
+		Windpower     string `json:"windpower"`
+		Humidity      string `json:"humidity"`
+		Reporttime    string `json:"reporttime"`
+	}
+
+	type Result struct {
+		Status   string  `json:"status"`
+		Count    string  `json:"count"`
+		Info     string  `json:"info"`
+		InfoCode string  `json:"infocode"`
+		Lives    []Lives `json:"lives"`
+	}
+
+	//默认滨江区
+	// 	杭州市	330100
+	// 杭州市市辖区	330101
+	// 上城区	330102
+	// 下城区	330103
+	// 江干区	330104
+	// 拱墅区	330105
+	// 西湖区	330106
+	// 滨江区	330108
+	// 萧山区	330109
+	// 余杭区	330110
+	url := fmt.Sprintf(urlformat, "d1c4ce5567b24fee573915a2d3d8110e", 330108)
+	resp, err := utils.HttpGet(url)
+	if err != nil {
+		logrus.Error("HttpGet failed, err=", err)
+		c.XML(http.StatusOK, NewTextMessage("我暂时出了点问题，请联系一下管理员~", c))
+		return
+	}
+
+	var result Result
+	err = json.Unmarshal(resp, &result)
+	if err != nil {
+		logrus.Error("json unmarshal failed, err=", err, " res:", string(resp))
+		c.XML(http.StatusOK, NewTextMessage("我暂时出了点问题，请联系一下管理员~", c))
+		return
+	}
+
+	logrus.Info("result:", result)
+
+	if result.InfoCode != "10000" {
+		c.XML(http.StatusOK, NewTextMessage("我暂时出了点问题，请联系一下管理员~", c))
+		return
+	}
+
+	content := "当前地区：" + result.Lives[0].City + "\n"
+	content += "天气：" + result.Lives[0].Weather + "\n"
+	content += "实时气温：" + result.Lives[0].Temperature + "℃\n"
+	content += "空气湿度" + result.Lives[0].Humidity + "\n"
+	content += "风向描述：" + result.Lives[0].Winddirection + "\n"
+	content += "风力级别：" + result.Lives[0].Windpower + "级\n"
+	content += "\n- - - - - - - - - - - - - - - - - - - - \n"
+	content += "发布时间：" + result.Lives[0].Reporttime + "\n"
+	c.XML(http.StatusOK, NewTextMessage(content, c))
+}
+
+func movieRecoHandler(c *gin.Context, args ...string) {
+
+}
+
+func musicRecoHandler(c *gin.Context, args ...string) {
+
+}
+
+func codejokeHandler(c *gin.Context, args ...string) {
+
+}
+
 func rootCmdAnalyze(c *gin.Context, content string) {
 	strs := strings.Split(content, " ")
 	if len(strs) > 0 {
@@ -213,8 +301,13 @@ func importantCmdAnalyze(c *gin.Context, content string) {
 	handler, ok := gImportantHandler[content[0:1]]
 	if !ok {
 		content := "Hi~ " + userName + " 回复前面的数字即可进入下列选项哦\n"
-		for cmd, hinfo := range gImportantHandler {
-			content += "\t" + cmd + "." + hinfo.description + "\n"
+		var keys []string
+		for key := range gImportantHandler {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		for _, key := range keys {
+			content += "\t" + key + "." + gImportantHandler[key].description + "\n"
 		}
 		c.XML(http.StatusOK, NewTextMessage(content, c))
 		return
