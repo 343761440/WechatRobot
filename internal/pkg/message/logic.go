@@ -1,6 +1,7 @@
 package message
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 	"sync"
@@ -42,8 +43,8 @@ var (
 		"new": newUserHandler,
 	}
 	gImportantHandler = map[string]KeyWordInfo{
-		"1": {"Q&A环节", qaHandler},
-		"2": {"待完成清单", todoListHandler},
+		"1": {"真心话环节", qaHandler},
+		"2": {"大冒险环节", todoListHandler},
 	}
 	gNextUser = NextUser{}
 	gUserType = map[string]int{
@@ -117,6 +118,7 @@ func qaHandler(c *gin.Context, args ...string) {
 		for _, q := range qlist {
 			content += q.QuestionID + "." + q.Question + "\n"
 		}
+		content += "Tips：所有问题的回复只能查看一次，查看后就无法再次查看了哦"
 		c.XML(http.StatusOK, NewTextMessage(content, c))
 		return
 	} else {
@@ -132,7 +134,58 @@ func qaHandler(c *gin.Context, args ...string) {
 }
 
 func todoListHandler(c *gin.Context, args ...string) {
-
+	cmd := args[0]
+	if cmd == "2" {
+		todolist, err := model.ListTodoItems(model.TODO_ALL)
+		if err != nil {
+			c.XML(http.StatusOK, NewTextMessage("抱歉，目前出了点状况，请联系管理员", c))
+			return
+		}
+		if len(todolist) == 0 {
+			c.XML(http.StatusOK, NewTextMessage("当前还没有待做的事项清单哦~", c))
+			return
+		}
+		nofinishCount := 0
+		finishCount := 0
+		content := "当前有以下待做清单：\n"
+		for _, todo := range todolist {
+			if todo.FinishState > 0 {
+				finishCount++
+			} else {
+				nofinishCount++
+			}
+			num := fmt.Sprint(todo.ID)
+			finish := fmt.Sprintf("(%d/1)", todo.FinishState)
+			content += "\t" + num + "." + todo.ItemInfo + " " + finish + "\n"
+		}
+		content += "\n- - - - - - - - - - - - - - - - - - - - \n"
+		content += fmt.Sprintf("目前已经完成了%d件待做事项，还有%d件待做事项等待完成哦，一起加油吧~\n", finishCount, nofinishCount)
+		content += "\nTips：回复21+待做事项可以补充清单\n"
+		content += "(例如：21 一起看日出"
+		c.XML(http.StatusOK, NewTextMessage(content, c))
+		return
+	} else {
+		substrs := strings.Split(args[0], " ")
+		subcmd := substrs[0]
+		if subcmd == "21" {
+			if len(substrs) >= 2 {
+				info := ""
+				for i := 1; i < len(substrs); i++ {
+					info += substrs[i] + " "
+				}
+				if err := model.CreateTodoItems(model.TodoItem{ItemInfo: info}); err != nil {
+					c.XML(http.StatusOK, NewTextMessage("我暂时出了点问题，请联系一下管理员", c))
+				} else {
+					c.XML(http.StatusOK, NewTextMessage("增加到待做清单成功！", c))
+				}
+				return
+			} else {
+				c.XML(http.StatusOK, NewTextMessage("正确格式：21 待做事项 (21与待做事项间的空格不要漏哦)", c))
+				return
+			}
+		}
+	}
+	c.XML(http.StatusOK, NewTextMessage("o(╥﹏╥)o我当前还无法消化这个信息", c))
 }
 
 func rootCmdAnalyze(c *gin.Context, content string) {
@@ -161,7 +214,7 @@ func importantCmdAnalyze(c *gin.Context, content string) {
 	if !ok {
 		content := "Hi~ " + userName + " 回复前面的数字即可进入下列选项哦\n"
 		for cmd, hinfo := range gImportantHandler {
-			content += cmd + "." + hinfo.description + "\n"
+			content += "\t" + cmd + "." + hinfo.description + "\n"
 		}
 		c.XML(http.StatusOK, NewTextMessage(content, c))
 		return
