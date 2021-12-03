@@ -95,3 +95,11 @@ func GetUserIdFromCtx(c *gin.Context) string {
 func GetFromUserIdFromCtx(c *gin.Context) string {
 	return getKeyFromCtx(c, kCtxFromUserId)
 }
+
+func GetUserNameFromCtx(c *gin.Context) string {
+	user := GetWxUserFromCtx(c)
+	if user != nil {
+		return user.NickName
+	}
+	return ""
+}

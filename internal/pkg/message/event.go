@@ -53,18 +53,17 @@ func handleSubscribeEvent(c *gin.Context, event EventCommon) {
 	if wxUser != nil {
 		userName = wxUser.NickName
 	} else {
+		user := model.WxUser{
+			UserId: event.FromUserName,
+		}
 		nextUser := getNextUser()
-		userType := model.USER_NORMAL
 		if nextUser != nil {
 			log.Info("Get Next User Success:", nextUser)
-			userName = nextUser.NickName
-			userType = nextUser.UserType
+			user.NickName = nextUser.NickName
+			user.UserType = nextUser.UserType
+			user.Birthday = nextUser.Birthday
 		}
-		user := model.WxUser{
-			NickName: userName,
-			UserId:   event.FromUserName,
-			UserType: userType,
-		}
+
 		if err := model.CreateWxUser(&user); err != nil {
 			log.Warn("CreateUser failed, err=", err)
 		}

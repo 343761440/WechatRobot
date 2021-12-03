@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 	"wxrobot/internal/app/common"
 	"wxrobot/internal/app/utils"
 	"wxrobot/internal/pkg/log"
@@ -35,8 +36,7 @@ import (
 type KeyWordHandle func(c *gin.Context, args ...string)
 
 type NextUser struct {
-	NextName string //下一个注册NickName
-	UserType int    // important / ""
+	User model.WxUser
 	sync.Mutex
 }
 
@@ -49,6 +49,9 @@ var (
 	gRootHandlers = map[string]KeyWordHandle{
 		"new": newUserHandler,
 		"err": lastErrorHandler,
+		"as":  addSongHandler,
+		"ls":  listSongHandler,
+		"us":  listUsersHandler,
 	}
 	gImportantHandler = map[string]KeyWordInfo{
 		"1": {"真心话环节", qaHandler},
@@ -56,7 +59,7 @@ var (
 		"3": {"实时天气", weatherHandler},
 		"4": {"电影推荐", movieRecoHandler},
 		"5": {"最近在听", musicRecoHandler},
-		"6": {"今日份冷笑话", coldjokeHandler},
+		"6": {"随机匣子", coldjokeHandler},
 	}
 	gNextUser = NextUser{}
 	gUserType = map[string]int{
@@ -67,8 +70,7 @@ var (
 )
 
 func (nu *NextUser) clear() {
-	nu.NextName = ""
-	nu.UserType = model.USER_NORMAL
+	nu.User = model.WxUser{}
 }
 
 func matchUserType(userType string) (int, bool) {
@@ -80,8 +82,8 @@ func newUserHandler(c *gin.Context, args ...string) {
 	gNextUser.Lock()
 	defer gNextUser.Unlock()
 
-	if len(args) != 2 {
-		c.XML(http.StatusOK, NewTextMessage("格式输入有误，正确格式：new username userType", c))
+	if len(args) < 2 {
+		c.XML(http.StatusOK, NewTextMessage("格式输入有误，正确格式：new username userType birthday(可选)", c))
 		return
 	}
 	utype, ok := matchUserType(args[1])
@@ -91,8 +93,11 @@ func newUserHandler(c *gin.Context, args ...string) {
 	}
 
 	userName := args[0]
-	gNextUser.NextName = userName
-	gNextUser.UserType = utype
+	gNextUser.User.NickName = userName
+	gNextUser.User.UserType = utype
+	if len(args) >= 3 {
+		gNextUser.User.Birthday = args[3]
+	}
 	c.XML(http.StatusOK, NewTextMessage(args[1]+"用户设置成功", c))
 }
 
@@ -104,15 +109,68 @@ func lastErrorHandler(c *gin.Context, args ...string) {
 	c.XML(http.StatusOK, NewTextMessage(lasterr, c))
 }
 
+func addSong(songName string) error {
+	//去qq音乐自动补充信息
+
+	//插入数据库
+	return nil
+}
+
+func addSongHandler(c *gin.Context, args ...string) {
+	if len(args) < 2 {
+		c.XML(http.StatusOK, NewTextMessage("格式输入有误，正确格式：as songname", c))
+		return
+	}
+}
+
+func listSongHandler(c *gin.Context, args ...string) {
+	name := ""
+	if len(args) >= 2 {
+		name = args[1]
+	}
+	songs, err := model.ListSongs(name, 0)
+	if err != nil {
+		c.XML(http.StatusOK, NewTextMessage("ListSongs Err,err="+err.Error(), c))
+		return
+	}
+	content := fmt.Sprintf("共计有%d条歌曲\n", len(songs))
+	for _, song := range songs {
+		content += describeSong(song)
+	}
+	c.XML(http.StatusOK, NewTextMessage(content, c))
+}
+
+func listUsersHandler(c *gin.Context, args ...string) {
+	users, err := model.ListWxUsers()
+	if err != nil {
+		c.XML(http.StatusOK, NewTextMessage(err.Error(), c))
+		return
+	}
+
+	DescribeUser := func(wu model.WxUser) string {
+		content := "ID：" + fmt.Sprint(wu.ID) + "\n"
+		content += "NickName：" + wu.NickName + "\n"
+		content += "Birthday：" + wu.Birthday + "\n"
+		content += "UserType：" + wu.GetUserType() + "\n"
+		return content
+	}
+
+	res := ""
+	for _, user := range users {
+		res += DescribeUser(user)
+		res += "\n- - - - - - - - - - - - - - - - - - - - \n"
+	}
+	c.XML(http.StatusOK, NewTextMessage(res, c))
+}
+
+/* ------------------------ 以下为Important用户的handler ----------------------------*/
+
 func getNextUser() *model.WxUser {
 	gNextUser.Lock()
 	defer gNextUser.Unlock()
 
-	if len(gNextUser.NextName) > 0 {
-		res := &model.WxUser{
-			NickName: gNextUser.NextName,
-			UserType: gNextUser.UserType,
-		}
+	if len(gNextUser.User.NickName) > 0 {
+		res := &gNextUser.User
 		gNextUser.clear()
 		return res
 	} else {
@@ -213,7 +271,7 @@ func todoListHandler(c *gin.Context, args ...string) {
 }
 
 func weatherHandler(c *gin.Context, args ...string) {
-	urlformat := "https://restapi.amap.com/v3/weather/weatherInfo?key=%s&city=%d&extensions=base"
+	urlformat := "https://restapi.amap.com/v3/weather/weatherInfo?key=%s&city=%d"
 
 	type Lives struct {
 		Province      string `json:"province"`
@@ -227,12 +285,28 @@ func weatherHandler(c *gin.Context, args ...string) {
 		Reporttime    string `json:"reporttime"`
 	}
 
+	type Cast struct {
+		Date         string `json:"date"`
+		Week         string `json:"week"`
+		DayWeather   string `json:"dayweather"`
+		NightWeather string `json:"nightweather"`
+		DayTemp      string `json:"daytemp"`
+		NightTemp    string `json:"nighttemp"`
+	}
+
+	type Forecast struct {
+		City       string `json:"city"`
+		Reporttime string `json:"reporttime"`
+		Casts      []Cast `json:"casts"`
+	}
+
 	type Result struct {
-		Status   string  `json:"status"`
-		Count    string  `json:"count"`
-		Info     string  `json:"info"`
-		InfoCode string  `json:"infocode"`
-		Lives    []Lives `json:"lives"`
+		Status   string    `json:"status"`
+		Count    string    `json:"count"`
+		Info     string    `json:"info"`
+		InfoCode string    `json:"infocode"`
+		Lives    []Lives   `json:"lives"`
+		Forecast *Forecast `json:"forecast"`
 	}
 
 	// 默认滨江区
@@ -265,6 +339,13 @@ func weatherHandler(c *gin.Context, args ...string) {
 	logrus.Info("result:", result)
 
 	if result.InfoCode != "10000" {
+		log.ErrorWithRecord("code not 10000, resp:", result)
+		c.XML(http.StatusOK, NewTextMessage("我暂时出了点问题，请联系一下小林同学~", c))
+		return
+	}
+
+	if len(result.Lives) == 0 {
+		log.ErrorWithRecord("lives is 0, resp:", result)
 		c.XML(http.StatusOK, NewTextMessage("我暂时出了点问题，请联系一下小林同学~", c))
 		return
 	}
@@ -275,8 +356,26 @@ func weatherHandler(c *gin.Context, args ...string) {
 	content += "空气湿度" + result.Lives[0].Humidity + "\n"
 	content += "风向描述：" + result.Lives[0].Winddirection + "\n"
 	content += "风力级别：" + result.Lives[0].Windpower + "级\n"
-	content += "\n- - - - - - - - - - - - - - - - - - - - \n"
 	content += "发布时间：" + result.Lives[0].Reporttime + "\n"
+	content += "\n- - - - - - - - - - - - - - - - - - - - \n"
+	if result.Forecast != nil {
+		if len(result.Forecast.Casts) > 0 {
+			cast := result.Forecast.Casts[0]
+			content += "白天温度：" + cast.DayTemp + "℃\n"
+			content += "晚上温度：" + cast.NightTemp + "℃\n"
+			content += "白天天气：" + cast.DayWeather + "\n"
+			content += "晚上天气：" + cast.NightWeather + "\n"
+			content += "\n- - - - - - - - - - - - - - - - - - - - \n"
+		}
+	}
+
+	if result.Lives[0].Temperature < "10" {
+		content += "当前温度只有" + result.Lives[0].Temperature + "℃" + "，出门一定一定要做好保暖工作哦"
+	} else if result.Lives[0].Temperature >= "10" && result.Lives[0].Temperature < "20" {
+		content += "当前温度为" + result.Lives[0].Temperature + "℃" + "，要好好穿衣服，不要感冒了"
+	} else {
+		content += "当前温度为" + result.Lives[0].Temperature + "℃" + "，稍有回暖，但不能松懈"
+	}
 
 	//得加一些文案，表示提醒，例如升温，降温等
 	c.XML(http.StatusOK, NewTextMessage(content, c))
@@ -339,6 +438,16 @@ func movieRecoHandler(c *gin.Context, args ...string) {
 		c.XML(http.StatusOK, NewTextMessage("我暂时出了点问题，请联系一下小林同学~", c))
 		return
 	}
+	if len(objects) == 0 {
+		log.ErrorWithRecord("get movie objects failed, len is zero")
+		c.XML(http.StatusOK, NewTextMessage("我暂时出了点问题，请联系一下小林同学~", c))
+		return
+	}
+	if len(objects[0].Datas) == 0 {
+		log.ErrorWithRecord("get movie Datas failed, len is zero")
+		c.XML(http.StatusOK, NewTextMessage("我暂时出了点问题，请联系一下小林同学~", c))
+		return
+	}
 	movie := objects[0]
 	content := "电影名：《" + movie.Datas[0].Name + "》\n"
 	content += "类型：" + movie.Datas[0].Genre + "\n"
@@ -350,12 +459,84 @@ func movieRecoHandler(c *gin.Context, args ...string) {
 	c.XML(http.StatusOK, NewTextMessage(content, c))
 }
 
+func describeSong(song model.Song) string {
+	var content string
+	content += "歌名：" + song.Name + "\n"
+	content += "歌手：" + song.Singer + "\n"
+	if len(song.PlayUrl) > 0 {
+		content += "歌曲链接：" + song.PlayUrl + "\n"
+	}
+	content += "分享时间：" + song.UploadTime.Format("2006-01-02 15:04:05")
+	content += "\n- - - - - - - - - - - - - - - - - - - - \n"
+	return content
+}
+
 func musicRecoHandler(c *gin.Context, args ...string) {
 
+	cmd := args[0]
+	if cmd == "5" {
+		songs, err := model.ListRootSongs(10)
+		if err != nil {
+			log.ErrorWithRecord("ListRootSongs failed,err=", err)
+			c.XML(http.StatusOK, NewTextMessage("暂无歌曲分享~", c))
+			return
+		}
+		content := "最近有人在听：\n"
+		for _, song := range songs {
+			content += describeSong(song)
+		}
+		content += "\n- - - - - - - - - - - - - - - - - - - - \n"
+		content += "可以分享你最近在听的歌哦~，输入51+歌名即可，例如：51 惊鸿一瞥"
+		c.XML(http.StatusOK, NewTextMessage(content, c))
+		return
+	} else {
+		substrs := strings.Split(cmd, " ")
+		subcmd := substrs[0]
+		if subcmd == "51" {
+			if len(substrs) >= 2 {
+				songName := ""
+				for i := 1; i < len(substrs); i++ {
+					songName += substrs[i] + " "
+				}
+				if err := addSong(songName); err != nil {
+					log.ErrorWithRecord("addSong failed, err=", err)
+					c.XML(http.StatusOK, NewTextMessage("我暂时出了点问题，请联系一下小林同学", c))
+				} else {
+					content := "分享歌曲成功\n"
+					content += "输入52可查看自己分享过的歌曲"
+					c.XML(http.StatusOK, NewTextMessage(content, c))
+				}
+				return
+			} else {
+				log.ErrorWithRecord("add song failed by wrong format, msg=", cmd)
+				c.XML(http.StatusOK, NewTextMessage("正确格式：51 歌名(51 歌名之间都有空格)", c))
+				return
+			}
+		} else if subcmd == "52" {
+			songs, err := model.ListSongs(GetUserNameFromCtx(c), 0)
+			if err != nil {
+				log.ErrorWithRecord("ListRootSongs failed,err=", err)
+				c.XML(http.StatusOK, NewTextMessage("暂无分享歌曲~", c))
+				return
+			}
+			content := "你最近分享了：\n"
+			for _, song := range songs {
+				content += describeSong(song)
+			}
+			c.XML(http.StatusOK, NewTextMessage(content, c))
+			return
+		}
+	}
 }
 
 func coldjokeHandler(c *gin.Context, args ...string) {
+	userName := ""
+	user := GetWxUserFromCtx(c)
+	if user != nil {
+		userName = user.NickName
+	}
 
+	c.XML(http.StatusOK, NewTextMessage("想你了 "+userName, c))
 }
 
 func rootCmdAnalyze(c *gin.Context, content string) {
@@ -376,13 +557,20 @@ func rootCmdAnalyze(c *gin.Context, content string) {
 
 func importantCmdAnalyze(c *gin.Context, content string) {
 	userName := ""
+	isBirth := false
 	user := GetWxUserFromCtx(c)
 	if user != nil {
 		userName = user.NickName
+		isBirth = user.IsBirthday()
 	}
 	handler, ok := gImportantHandler[content[0:1]]
 	if !ok {
-		content := "Hi~ " + userName + " 回复前面的数字即可进入下列选项哦\n"
+		content := "Hi~ " + userName + "\n"
+		if isBirth {
+			log.Info("time:", time.Now().Format("2006-01-02"))
+			content += "今天是" + time.Now().Format("2006-01-02") + " ,是你的破蛋日，祝你生日快乐~\n"
+		}
+		content += "回复前面的数字即可进入下列选项哦\n"
 		var keys []string
 		for key := range gImportantHandler {
 			keys = append(keys, key)

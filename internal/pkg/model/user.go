@@ -1,12 +1,17 @@
 package model
 
-import "gorm.io/gorm"
+import (
+	"time"
+
+	"gorm.io/gorm"
+)
 
 type WxUser struct {
 	gorm.Model
 	UserId   string `gorm:"uniqueIndex;type:varchar(32)"`
 	NickName string //备注名
 	UserType int
+	Birthday string
 }
 
 const (
@@ -41,4 +46,35 @@ func GetWxUser(userId string) (*WxUser, error) {
 		return nil, err
 	}
 	return &m, nil
+}
+
+func ListWxUsers() ([]WxUser, error) {
+	var res []WxUser
+	query := GetInstance().db.Model(&WxUser{}).Where("user_type != ?", USER_ADMIN).Find(&res)
+	if query.Error != nil {
+		return nil, query.Error
+	}
+	return res, nil
+}
+
+func (wu *WxUser) IsBirthday() bool {
+	if len(wu.Birthday) > 0 {
+		if time.Now().Format("01-02") == wu.Birthday {
+			return true
+		}
+	}
+	return false
+}
+
+func (wu *WxUser) GetUserType() string {
+	if wu.UserType == USER_NORMAL {
+		return "Normal"
+	} else if wu.UserType == USER_FRIEND {
+		return "Friend"
+	} else if wu.UserType == USER_IMPORTANT {
+		return "Important"
+	} else if wu.UserType == USER_ADMIN {
+		return "Root"
+	}
+	return "Unknow"
 }
