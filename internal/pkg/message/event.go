@@ -5,8 +5,9 @@ import (
 	"net/http"
 	"wxrobot/internal/pkg/model"
 
+	"wxrobot/internal/pkg/log"
+
 	"github.com/gin-gonic/gin"
-	log "github.com/sirupsen/logrus"
 )
 
 type EventType string
@@ -65,14 +66,15 @@ func handleSubscribeEvent(c *gin.Context, event EventCommon) {
 		}
 
 		if err := model.CreateWxUser(&user); err != nil {
-			log.Warn("CreateUser failed, err=", err)
+			log.ErrorWithRecord("CreateUser failed, err=", err)
 		}
 	}
 
 	content := "白茶清欢无别事，我在等风也等你"
 	if len(userName) > 0 {
 		content += "\n"
-		content += "终于等到你了 " + userName
+		content += "终于等到你了 " + userName + "\n"
+		content += "回复m即可查看主菜单"
 	}
 	c.XML(200, NewTextMessage(content, c))
 }

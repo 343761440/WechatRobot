@@ -54,12 +54,12 @@ var (
 		"us":  listUsersHandler,
 	}
 	gImportantHandler = map[string]KeyWordInfo{
-		"1": {"真心话环节", qaHandler},
+		"1": {"真心话环节<-", qaHandler},
 		"2": {"要做的xx件事", todoListHandler},
 		"3": {"实时天气", weatherHandler},
 		"4": {"电影推荐", movieRecoHandler},
-		"5": {"最近在听", musicRecoHandler},
-		"6": {"随机匣子", coldjokeHandler},
+		"5": {"随机匣子", coldjokeHandler},
+		//"6": {"最近在听", musicRecoHandler},
 	}
 	gNextUser = NextUser{}
 	gUserType = map[string]int{
@@ -88,7 +88,7 @@ func newUserHandler(c *gin.Context, args ...string) {
 	}
 	utype, ok := matchUserType(args[1])
 	if !ok {
-		c.XML(http.StatusOK, NewTextMessage("无法识别的userType", c))
+		c.XML(http.StatusOK, NewTextMessage("无法识别的userType:"+args[1], c))
 		return
 	}
 
@@ -96,7 +96,7 @@ func newUserHandler(c *gin.Context, args ...string) {
 	gNextUser.User.NickName = userName
 	gNextUser.User.UserType = utype
 	if len(args) >= 3 {
-		gNextUser.User.Birthday = args[3]
+		gNextUser.User.Birthday = args[2]
 	}
 	c.XML(http.StatusOK, NewTextMessage(args[1]+"用户设置成功", c))
 }
@@ -111,16 +111,32 @@ func lastErrorHandler(c *gin.Context, args ...string) {
 
 func addSong(songName string) error {
 	//去qq音乐自动补充信息
-
+	//http://mobilecdn.kugou.com/api/v3/search/song?format=json&keyword=像我这样的人&page=1&pagesize=1&showtype=1
 	//插入数据库
 	return nil
 }
 
 func addSongHandler(c *gin.Context, args ...string) {
-	if len(args) < 2 {
-		c.XML(http.StatusOK, NewTextMessage("格式输入有误，正确格式：as songname", c))
+	// if len(args) < 2 {
+	// 	c.XML(http.StatusOK, NewTextMessage("格式输入有误，正确格式：as songname", c))
+	// 	return
+	// }
+	qlist, err := model.ListQuestions()
+	if err != nil {
+		log.ErrorWithRecord("ListQuestions failed, err=", err)
+		c.XML(http.StatusOK, NewTextMessage("抱歉，目前出了点状况，请联系小林同学", c))
 		return
 	}
+
+	var content string
+	for _, q := range qlist {
+		content := "Q" + q.QuestionID + ":" + q.Question + "\n"
+		content += "\n- - - - - - - - - - - - - - - - - - - - \n"
+		content += q.Answer
+		content += "\n\n"
+	}
+
+	c.XML(http.StatusOK, NewTextMessage(content, c))
 }
 
 func listSongHandler(c *gin.Context, args ...string) {
@@ -189,14 +205,18 @@ func qaHandler(c *gin.Context, args ...string) {
 			return
 		}
 		if len(qlist) == 0 {
-			c.XML(http.StatusOK, NewTextMessage("当前没有可以查看的Q&A了~", c))
+			content := "你已经看完了所有的Q&A啦~\n"
+			content += "本意是想你看完后，这里会提示那现在就把舞台交给身边的林同学吧，可惜搞砸了哈哈\n"
+			content += "不过也算是把想说的话都说啦，看到这里应该也不早了，拖延症，你是不是也该去洗洗睡了\n"
+			c.XML(http.StatusOK, NewTextMessage(content, c))
 			return
 		}
-		content := "当前有以下Q&A可供查看，回复问题前的数字即可查看详细内容(例如1001\n"
+		content := "当前有以下Q&A可供查看，回复数字即可查看详细内容(例如：1001)\n"
 		for _, q := range qlist {
 			content += q.QuestionID + "." + q.Question + "\n"
 		}
-		content += "Tips：所有问题的回复只能查看一次，查看后就无法再次查看了哦"
+		content += "\n- - - - - - - - - - - - - - - - - - - - \n"
+		content += "Tips：所有问题的回复只能查看一次，查看后就无法再次查看了哦。"
 		c.XML(http.StatusOK, NewTextMessage(content, c))
 		return
 	} else {
@@ -205,9 +225,11 @@ func qaHandler(c *gin.Context, args ...string) {
 			c.XML(http.StatusOK, NewTextMessage("未找到当前数字对应的Question", c))
 			return
 		}
-		content := "Q" + q.QuestionID + ".:" + q.Question + "\n"
+		content := "Q" + q.QuestionID + ":" + q.Question + "\n"
+		content += "\n- - - - - - - - - - - - - - - - - - - - \n"
 		content += q.Answer
 		c.XML(http.StatusOK, NewTextMessage(content, c))
+		model.UpdateQuestionReadness(cmd)
 	}
 }
 
@@ -453,6 +475,7 @@ func movieRecoHandler(c *gin.Context, args ...string) {
 	content += "类型：" + movie.Datas[0].Genre + "\n"
 	content += "语言：" + movie.Datas[0].Language + "\n"
 	content += "国家：" + movie.Datas[0].Country + "\n"
+	content += "发行时间：" + movie.Year + "\n"
 	content += "海报：" + movie.Datas[0].Poster + "\n"
 	content += "豆瓣评分：" + movie.DoubanRate + "\n"
 	content += "影片概要：" + movie.Datas[0].Description + "\n"
@@ -474,7 +497,7 @@ func describeSong(song model.Song) string {
 func musicRecoHandler(c *gin.Context, args ...string) {
 
 	cmd := args[0]
-	if cmd == "5" {
+	if cmd == "6" {
 		songs, err := model.ListRootSongs(10)
 		if err != nil {
 			log.ErrorWithRecord("ListRootSongs failed,err=", err)
@@ -486,13 +509,13 @@ func musicRecoHandler(c *gin.Context, args ...string) {
 			content += describeSong(song)
 		}
 		content += "\n- - - - - - - - - - - - - - - - - - - - \n"
-		content += "可以分享你最近在听的歌哦~，输入51+歌名即可，例如：51 惊鸿一瞥"
+		content += "可以分享你最近在听的歌哦~，输入61+歌名即可，例如：61 惊鸿一瞥"
 		c.XML(http.StatusOK, NewTextMessage(content, c))
 		return
 	} else {
 		substrs := strings.Split(cmd, " ")
 		subcmd := substrs[0]
-		if subcmd == "51" {
+		if subcmd == "61" {
 			if len(substrs) >= 2 {
 				songName := ""
 				for i := 1; i < len(substrs); i++ {
@@ -503,16 +526,16 @@ func musicRecoHandler(c *gin.Context, args ...string) {
 					c.XML(http.StatusOK, NewTextMessage("我暂时出了点问题，请联系一下小林同学", c))
 				} else {
 					content := "分享歌曲成功\n"
-					content += "输入52可查看自己分享过的歌曲"
+					content += "输入62可查看自己分享过的歌曲"
 					c.XML(http.StatusOK, NewTextMessage(content, c))
 				}
 				return
 			} else {
 				log.ErrorWithRecord("add song failed by wrong format, msg=", cmd)
-				c.XML(http.StatusOK, NewTextMessage("正确格式：51 歌名(51 歌名之间都有空格)", c))
+				c.XML(http.StatusOK, NewTextMessage("正确格式：61 歌名(61 歌名之间都有空格)", c))
 				return
 			}
-		} else if subcmd == "52" {
+		} else if subcmd == "62" {
 			songs, err := model.ListSongs(GetUserNameFromCtx(c), 0)
 			if err != nil {
 				log.ErrorWithRecord("ListRootSongs failed,err=", err)
@@ -530,13 +553,7 @@ func musicRecoHandler(c *gin.Context, args ...string) {
 }
 
 func coldjokeHandler(c *gin.Context, args ...string) {
-	userName := ""
-	user := GetWxUserFromCtx(c)
-	if user != nil {
-		userName = user.NickName
-	}
-
-	c.XML(http.StatusOK, NewTextMessage("想你了 "+userName, c))
+	c.XML(http.StatusOK, NewTextMessage("给你看星星：我好想你能看到星星", c))
 }
 
 func rootCmdAnalyze(c *gin.Context, content string) {
@@ -570,7 +587,7 @@ func importantCmdAnalyze(c *gin.Context, content string) {
 			log.Info("time:", time.Now().Format("2006-01-02"))
 			content += "今天是" + time.Now().Format("2006-01-02") + " ,是你的破蛋日，祝你生日快乐~\n"
 		}
-		content += "回复前面的数字即可进入下列选项哦\n"
+		content += "回复前面的数字即可进入下列选项，可重复回复哦\n"
 		var keys []string
 		for key := range gImportantHandler {
 			keys = append(keys, key)

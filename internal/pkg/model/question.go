@@ -1,6 +1,10 @@
 package model
 
-import "gorm.io/gorm"
+import (
+	"errors"
+
+	"gorm.io/gorm"
+)
 
 type Question struct {
 	gorm.Model
@@ -22,9 +26,12 @@ func ListQuestions() ([]Question, error) {
 
 func GetQuestion(questionId string) (*Question, error) {
 	q := Question{}
-	err := GetInstance().db.Model(&Question{}).Where("question_id=?", questionId).Find(&q).Error
+	err := GetInstance().db.Model(&Question{}).Where("question_id=? AND readness=0", questionId).Find(&q).Error
 	if err != nil {
 		return nil, err
+	}
+	if q.ID == 0 {
+		return nil, errors.New("this Question Has been READ")
 	}
 	return &q, nil
 }
@@ -32,5 +39,11 @@ func GetQuestion(questionId string) (*Question, error) {
 func CreateQuestions(quesList []Question) error {
 	return GetInstance().db.Transaction(func(tx *gorm.DB) error {
 		return tx.Create(quesList).Error
+	})
+}
+
+func UpdateQuestionReadness(questionId string) error {
+	return GetInstance().db.Transaction(func(tx *gorm.DB) error {
+		return tx.Model(&Question{}).Where("question_id=?", questionId).Update("readness", 1).Error
 	})
 }
