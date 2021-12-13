@@ -9,7 +9,7 @@ import (
 )
 
 type LastError struct {
-	errorInfo string
+	errorInfo []string
 	sync.Mutex
 }
 
@@ -39,12 +39,15 @@ func Error(args ...interface{}) {
 func ErrorWithRecord(args ...interface{}) {
 	logrus.Error(args...)
 	gError.Lock()
-	gError.errorInfo = time.Now().Format("2006-01-02 15:04:05") + "\n" + fmt.Sprint(args...)
+	gError.errorInfo = append(gError.errorInfo, time.Now().Format("2006-01-02 15:04:05")+"\n"+fmt.Sprint(args...))
 	gError.Unlock()
 }
 
-func GetLastError() string {
+func GetLastError() []string {
 	gError.Lock()
 	defer gError.Unlock()
-	return gError.errorInfo
+
+	res := gError.errorInfo
+	gError.errorInfo = gError.errorInfo[0:0]
+	return res
 }

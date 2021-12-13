@@ -21,9 +21,9 @@ import (
 
 /*
  业务逻辑控制主要在这个文件
- 1、小林同学命名新用户
-	1.1 小林同学获取所有userId
-	1.2 小林同学设置人员类型
+ 1、林同学命名新用户
+	1.1 林同学获取所有userId
+	1.2 林同学设置人员类型
 	1.3
  2、重要人的QA
  3、和重要人的待完成事项
@@ -58,12 +58,13 @@ const (
 
 var (
 	gRootHandlers = map[string]KeyWordHandle{
-		"new":        newUserHandler,
-		"err":        lastErrorHandler,
-		"lsuser":     listUsersHandler,
-		"todo":       todoController,
-		"subsomeone": subscribeController,
-		"remeber":    rememberController,
+		"new":     newUserHandler,
+		"err":     lastErrorHandler,
+		"lsuser":  listUsersHandler,
+		"todo":    todoController,
+		"sub":     subscribeController,
+		"remeber": rememberController,
+		"joke":    addJokeController,
 	}
 	gImportantHandler = map[string]KeyWordInfo{
 		imporQACmd:     {"真心话环节", qaHandler},
@@ -117,9 +118,13 @@ func newUserHandler(c *gin.Context, args ...string) {
 func lastErrorHandler(c *gin.Context, args ...string) {
 	lasterr := log.GetLastError()
 	if len(lasterr) == 0 {
-		lasterr = "NoError"
+		c.XML(http.StatusOK, NewTextMessage("NoError Happend", c))
 	}
-	c.XML(http.StatusOK, NewTextMessage(lasterr, c))
+	content := "Error List:"
+	for _, e := range lasterr {
+		content += e + "\n"
+	}
+	c.XML(http.StatusOK, NewTextMessage(content, c))
 }
 
 func listUsersHandler(c *gin.Context, args ...string) {
@@ -212,6 +217,14 @@ func rememberController(c *gin.Context, args ...string) {
 	}
 }
 
+//查看love joke
+func addJokeController(c *gin.Context, args ...string) {
+	if len(args) == 0 {
+		c.XML(http.StatusOK, NewTextMessage("joke ls/add", c))
+		return
+	}
+}
+
 /* ------------------------ 以下为Important用户的handler ----------------------------*/
 
 func getNextUser() *model.WxUser {
@@ -234,7 +247,7 @@ func qaHandler(c *gin.Context, args ...string) {
 		qlist, err := model.ListQuestions()
 		if err != nil {
 			log.ErrorWithRecord("ListQuestions failed, err=", err)
-			c.XML(http.StatusOK, NewTextMessage("抱歉，目前出了点状况，请联系小林同学", c))
+			c.XML(http.StatusOK, NewTextMessage("抱歉，目前出了点状况，请联系林同学", c))
 			return
 		}
 		if len(qlist) == 0 {
@@ -309,7 +322,7 @@ func todoListHandler(c *gin.Context, args ...string) {
 		todolist, err := model.ListTodoItems(model.TODO_ALL)
 		if err != nil {
 			log.ErrorWithRecord("ListTodoItems failed, err=", err)
-			c.XML(http.StatusOK, NewTextMessage("抱歉，目前出了点状况，请联系小林同学", c))
+			c.XML(http.StatusOK, NewTextMessage("抱歉，目前出了点状况，请联系林同学", c))
 			return
 		}
 		if len(todolist) == 0 {
@@ -332,7 +345,7 @@ func todoListHandler(c *gin.Context, args ...string) {
 				}
 				if err := model.CreateTodoItems(model.TodoItem{ItemInfo: info}); err != nil {
 					log.ErrorWithRecord("CreateTodoItems failed, err=", err)
-					c.XML(http.StatusOK, NewTextMessage("我暂时出了点问题，请联系一下小林同学", c))
+					c.XML(http.StatusOK, NewTextMessage("我暂时出了点问题，请联系一下林同学", c))
 				} else {
 					c.XML(http.StatusOK, NewTextMessage("增加到待做清单成功！", c))
 				}
@@ -402,7 +415,7 @@ func weatherHandler(c *gin.Context, args ...string) {
 	resp, err := utils.HttpGet(url)
 	if err != nil {
 		log.ErrorWithRecord("weather HttpGet failed, err=", err)
-		c.XML(http.StatusOK, NewTextMessage("我暂时出了点问题，请联系一下小林同学~", c))
+		c.XML(http.StatusOK, NewTextMessage("我暂时出了点问题，请联系一下林同学~", c))
 		return
 	}
 
@@ -410,7 +423,7 @@ func weatherHandler(c *gin.Context, args ...string) {
 	err = json.Unmarshal(resp, &result)
 	if err != nil {
 		log.ErrorWithRecord("weather json unmarshal failed, err=", err, " res:", string(resp))
-		c.XML(http.StatusOK, NewTextMessage("我暂时出了点问题，请联系一下小林同学~", c))
+		c.XML(http.StatusOK, NewTextMessage("我暂时出了点问题，请联系一下林同学~", c))
 		return
 	}
 
@@ -418,13 +431,13 @@ func weatherHandler(c *gin.Context, args ...string) {
 
 	if result.InfoCode != "10000" {
 		log.ErrorWithRecord("code not 10000, resp:", result)
-		c.XML(http.StatusOK, NewTextMessage("我暂时出了点问题，请联系一下小林同学~", c))
+		c.XML(http.StatusOK, NewTextMessage("我暂时出了点问题，请联系一下林同学~", c))
 		return
 	}
 
 	if len(result.Lives) == 0 {
 		log.ErrorWithRecord("lives is 0, resp:", result)
-		c.XML(http.StatusOK, NewTextMessage("我暂时出了点问题，请联系一下小林同学~", c))
+		c.XML(http.StatusOK, NewTextMessage("我暂时出了点问题，请联系一下林同学~", c))
 		return
 	}
 
@@ -505,7 +518,7 @@ func movieRecoHandler(c *gin.Context, args ...string) {
 	resp, err := utils.HttpGet(url)
 	if err != nil {
 		log.ErrorWithRecord("HttpGet movie failed, err=", err, " res:", string(resp))
-		c.XML(http.StatusOK, NewTextMessage("我暂时出了点问题，请联系一下小林同学~", c))
+		c.XML(http.StatusOK, NewTextMessage("我暂时出了点问题，请联系一下林同学~", c))
 		return
 	}
 
@@ -513,17 +526,17 @@ func movieRecoHandler(c *gin.Context, args ...string) {
 	err = json.Unmarshal(resp, &objects)
 	if err != nil {
 		log.ErrorWithRecord("Unmarshal movie failed, err=", err, " res:", string(resp))
-		c.XML(http.StatusOK, NewTextMessage("我暂时出了点问题，请联系一下小林同学~", c))
+		c.XML(http.StatusOK, NewTextMessage("我暂时出了点问题，请联系一下林同学~", c))
 		return
 	}
 	if len(objects) == 0 {
 		log.ErrorWithRecord("get movie objects failed, len is zero")
-		c.XML(http.StatusOK, NewTextMessage("我暂时出了点问题，请联系一下小林同学~", c))
+		c.XML(http.StatusOK, NewTextMessage("我暂时出了点问题，请联系一下林同学~", c))
 		return
 	}
 	if len(objects[0].Datas) == 0 {
 		log.ErrorWithRecord("get movie Datas failed, len is zero")
-		c.XML(http.StatusOK, NewTextMessage("我暂时出了点问题，请联系一下小林同学~", c))
+		c.XML(http.StatusOK, NewTextMessage("我暂时出了点问题，请联系一下林同学~", c))
 		return
 	}
 	movie := objects[0]
@@ -538,20 +551,18 @@ func movieRecoHandler(c *gin.Context, args ...string) {
 	c.XML(http.StatusOK, NewTextMessage(content, c))
 }
 
-func describeSong(song model.Song) string {
-	var content string
-	content += "歌名：" + song.Name + "\n"
-	content += "歌手：" + song.Singer + "\n"
-	if len(song.PlayUrl) > 0 {
-		content += "歌曲链接：" + song.PlayUrl + "\n"
-	}
-	content += "分享时间：" + song.UploadTime.Format("2006-01-02 15:04:05")
-	content += "\n- - - - - - - - - - - - - - - - - - - - \n"
-	return content
-}
-
 func coldjokeHandler(c *gin.Context, args ...string) {
-	c.XML(http.StatusOK, NewTextMessage("给你看星星：我好想你能看到星星", c))
+	lovejoke, err := model.GetALoveJoke()
+	if err != nil {
+		log.ErrorWithRecord("get coldjokeHandler failed, err=", err)
+		c.XML(http.StatusOK, NewTextMessage("我暂时出了点问题，请联系一下林同学~", c))
+		return
+	}
+	if len(lovejoke) == 0 {
+		c.XML(http.StatusOK, NewTextMessage("请你看星星：我好想你", c))
+		return
+	}
+	c.XML(http.StatusOK, NewTextMessage(lovejoke, c))
 }
 
 //记仇小本本
