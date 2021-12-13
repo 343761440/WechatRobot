@@ -21,9 +21,6 @@ var (
 		"remeber": rememberController,
 		"joke":    addJokeController,
 	}
-	gImportantHandlers = map[string]KeyWordHandle{
-		"jc": jcController,
-	}
 	gNextUser = NextUser{}
 	gUserType = map[string]int{
 		"Important": model.USER_IMPORTANT,

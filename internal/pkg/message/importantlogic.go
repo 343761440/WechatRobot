@@ -6,6 +6,7 @@ import (
 	"math/rand"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 	"wxrobot/internal/app/common"
@@ -30,12 +31,15 @@ const (
 var (
 	gImportantDescribes = map[string]KeyWordInfo{
 		//imporQACmd:     {"真心话环节", qaHandler},
-		imporTodoCmd:   {"要做的xx件事", todoListHandler},
-		imporWeathCmd:  {"实时天气", weatherHandler},
-		imporMovieCmd:  {"电影推荐", movieRecoHandler},
-		imporRandomCmd: {"随机匣子", coldjokeHandler},
+		imporTodoCmd:   {"要做的xx件事", todoListDescriber},
+		imporWeathCmd:  {"实时天气", weatherDescriber},
+		imporMovieCmd:  {"电影推荐", movieRecoDescriber},
+		imporRandomCmd: {"随机匣子", coldjokeDescriber},
 		imporRmbCmd:    {"记仇小本本", jcDescriber},
 		//imporBookCmd: {"书单推荐", bookDescriber},
+	}
+	gImportantHandlers = map[string]KeyWordHandle{
+		"记仇": jcController,
 	}
 )
 
@@ -117,7 +121,7 @@ func describeTodos(items []model.TodoItem) string {
 	return content
 }
 
-func todoListHandler(c *gin.Context, args ...string) {
+func todoListDescriber(c *gin.Context, args ...string) {
 	cmd := args[0]
 	if cmd == imporTodoCmd {
 		todolist, err := model.ListTodoItems(model.TODO_ALL)
@@ -163,7 +167,7 @@ func todoListHandler(c *gin.Context, args ...string) {
 	c.XML(http.StatusOK, NewTextMessage("o(╥﹏╥)o我当前还无法消化这个信息", c))
 }
 
-func weatherHandler(c *gin.Context, args ...string) {
+func weatherDescriber(c *gin.Context, args ...string) {
 	urlformat := "https://restapi.amap.com/v3/weather/weatherInfo?key=%s&city=%d"
 
 	type Lives struct {
@@ -288,7 +292,7 @@ func getGlobalMovieIncrbyNum() (int64, error) {
 	return num, nil
 }
 
-func movieRecoHandler(c *gin.Context, args ...string) {
+func movieRecoDescriber(c *gin.Context, args ...string) {
 	type Data struct {
 		ID          string `json:"id"`
 		Poster      string `json:"poster"`
@@ -353,7 +357,7 @@ func movieRecoHandler(c *gin.Context, args ...string) {
 	c.XML(http.StatusOK, NewTextMessage(content, c))
 }
 
-func coldjokeHandler(c *gin.Context, args ...string) {
+func coldjokeDescriber(c *gin.Context, args ...string) {
 	lovejoke, err := model.GetALoveJoke()
 	if err != nil {
 		log.ErrorWithRecord("get coldjokeHandler failed, err=", err)
@@ -371,22 +375,104 @@ func coldjokeHandler(c *gin.Context, args ...string) {
 func jcDescriber(c *gin.Context, args ...string) {
 	name := GetUserNameFromCtx(c)
 	content := name + "打开了记仇小本本......\n"
-	content += "是谁！惹" + name + "不高兴了！！！\n"
 	content += "记仇小本本操作方法:"
 	content += "\n- - - - - - - - - - - - - - - - - - - - \n"
-	content += "写小本本：jc add xxxxx，例如：jc add 2021.12.13,小林审美不行\n"
+	content += "写小本本：记仇 增加 xxxx\n例如：记仇 增加 2021.12.13,小林审美不行"
 	content += "\n- - - - - - - - - - - - - - - - - - - - \n"
-	content += "显示小本本：jc ls\n"
+	content += "显示小本本：记仇 罗列"
 	content += "\n- - - - - - - - - - - - - - - - - - - - \n"
-	content += "修改小本本：jc mod 事件id 事件内容,例如：jc mod 3 2021.12.13,小林审美是真的不行\n"
+	content += "修改小本本：记仇 修改 事件id 事件内容\n例如：记仇 修改 3 2021.12.13,小林审美是真的不行\n"
 	c.XML(http.StatusOK, NewTextMessage(content, c))
 }
 
-func bookDescriber(c *gin.Context, args ...string) {
-
+func describeJcEvent(jes ...model.JcEvent) string {
+	content := ""
+	for _, je := range jes {
+		content += fmt.Sprintf("%d.%s在%s写下:\n%s", je.ID, je.Author, je.CreatedAt.Format("2006-01-02 15:04"), je.Event)
+		content += "\n- - - - - - - - - - - - - - - - - - - - \n"
+	}
+	if content == "" {
+		content = "当前小本本还没有内容~"
+	}
+	return content
 }
 
 func jcController(c *gin.Context, args ...string) {
+	if len(args) == 0 {
+		c.XML(http.StatusOK, NewTextMessage("记仇小本本当前只支持这些选项哦：增加/罗列/修改", c))
+		return
+	}
+
+	userName := GetUserNameFromCtx(c)
+
+	cmd := args[0]
+	if cmd == "增加" {
+		if len(args) < 2 {
+			c.XML(http.StatusOK, NewTextMessage("正确格式：记仇 增加 张三不爱吃香菜", c))
+			return
+		}
+		event := ""
+		for i := 1; i < len(args); i++ {
+			event += args[i] + " "
+		}
+		err := model.AddJCEvent(userName, event)
+		if err != nil {
+			log.ErrorWithRecord("AddJCEvent failed, err=", err)
+			c.XML(http.StatusOK, NewTextMessage("我暂时出了点问题，请联系一下林同学~", c))
+			return
+		}
+		c.XML(http.StatusOK, NewTextMessage("添加到小本本成功！", c))
+		return
+	} else if cmd == "罗列" {
+		jcs, err := model.ListJCEvent()
+		if err != nil {
+			log.ErrorWithRecord("ListJCEvent failed, err=", err)
+			c.XML(http.StatusOK, NewTextMessage("我暂时出了点问题，请联系一下林同学~", c))
+			return
+		}
+		content := describeJcEvent(jcs...)
+		c.XML(http.StatusOK, NewTextMessage(content, c))
+		return
+	} else if cmd == "修改" {
+		if len(args) < 3 {
+			c.XML(http.StatusOK, NewTextMessage("正确格式：记仇 修改 1 张三爱吃香菜", c))
+			return
+		}
+		id, err := strconv.ParseInt(args[1], 10, 64)
+		if err != nil {
+			log.ErrorWithRecord("jc mod ParseInt failed, err=", err)
+			c.XML(http.StatusOK, NewTextMessage("正确格式：记仇 修改 事件id 修改后的内容，当前输入的事件id不是数字哦~", c))
+			return
+		}
+		jc, err := model.GetJCEvent(uint(id))
+		if err != nil {
+			log.ErrorWithRecord("GetJCEvent failed, err=", err)
+			c.XML(http.StatusOK, NewTextMessage("无法找到当前输入的事件id哦~", c))
+			return
+		}
+
+		if jc.Author != userName {
+			c.XML(http.StatusOK, NewTextMessage("无法修改他人记录的事件哦~", c))
+			return
+		}
+
+		event := ""
+		for i := 2; i < len(args); i++ {
+			event += args[i] + " "
+		}
+		err = model.UpdateJCEvent(uint(id), event)
+		if err != nil {
+			log.ErrorWithRecord("UpdateJCEvent failed, err=", err)
+			c.XML(http.StatusOK, NewTextMessage("我暂时出了点问题，请联系一下林同学~", c))
+			return
+		}
+	} else {
+		c.XML(http.StatusOK, NewTextMessage("记仇小本本当前只支持这些选项哦：增加/罗列/修改", c))
+		return
+	}
+}
+
+func bookDescriber(c *gin.Context, args ...string) {
 
 }
 
