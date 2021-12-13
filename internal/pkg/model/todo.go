@@ -46,3 +46,9 @@ func CreateTodoItems(todolist ...TodoItem) error {
 		return tx.Create(todolist).Error
 	})
 }
+
+func UpdateTodoFinish(id int, fin int) error {
+	return GetInstance().db.Transaction(func(tx *gorm.DB) error {
+		return tx.Model(&TodoItem{}).Where("id=?", id).Update("finish_state", fin).Error
+	})
+}

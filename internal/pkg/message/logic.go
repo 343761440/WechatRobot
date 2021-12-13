@@ -6,6 +6,7 @@ import (
 	"math/rand"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -45,27 +46,39 @@ type KeyWordInfo struct {
 	handler     KeyWordHandle
 }
 
+const (
+	imporQACmd     = "1"
+	imporTodoCmd   = "2"
+	imporWeathCmd  = "3"
+	imporMovieCmd  = "4"
+	imporRandomCmd = "5"
+	imporRmbCmd    = "6"
+	imporBookCmd   = "7"
+)
+
 var (
 	gRootHandlers = map[string]KeyWordHandle{
-		"new": newUserHandler,
-		"err": lastErrorHandler,
-		"as":  addSongHandler,
-		"ls":  listSongHandler,
-		"us":  listUsersHandler,
+		"new":        newUserHandler,
+		"err":        lastErrorHandler,
+		"lsuser":     listUsersHandler,
+		"todo":       todoController,
+		"subsomeone": subscribeController,
+		"remeber":    rememberController,
 	}
 	gImportantHandler = map[string]KeyWordInfo{
-		"1": {"真心话环节<-", qaHandler},
-		"2": {"要做的xx件事", todoListHandler},
-		"3": {"实时天气", weatherHandler},
-		"4": {"电影推荐", movieRecoHandler},
-		"5": {"随机匣子", coldjokeHandler},
-		//"6": {"最近在听", musicRecoHandler},
+		imporQACmd:     {"真心话环节", qaHandler},
+		imporTodoCmd:   {"要做的xx件事", todoListHandler},
+		imporWeathCmd:  {"实时天气", weatherHandler},
+		imporMovieCmd:  {"电影推荐", movieRecoHandler},
+		imporRandomCmd: {"随机匣子", coldjokeHandler},
+		//imporRmbCmd: {"记仇小本本", remeberHandler},
+		//imporBookCmd: {"书单推荐", bookHandler},
 	}
 	gNextUser = NextUser{}
 	gUserType = map[string]int{
-		"important": model.USER_IMPORTANT,
-		"normal":    model.USER_NORMAL,
-		"friend":    model.USER_FRIEND,
+		"Important": model.USER_IMPORTANT,
+		"Normal":    model.USER_NORMAL,
+		"Friend":    model.USER_FRIEND,
 	}
 )
 
@@ -109,53 +122,6 @@ func lastErrorHandler(c *gin.Context, args ...string) {
 	c.XML(http.StatusOK, NewTextMessage(lasterr, c))
 }
 
-func addSong(songName string) error {
-	//去qq音乐自动补充信息
-	//http://mobilecdn.kugou.com/api/v3/search/song?format=json&keyword=像我这样的人&page=1&pagesize=1&showtype=1
-	//插入数据库
-	return nil
-}
-
-func addSongHandler(c *gin.Context, args ...string) {
-	// if len(args) < 2 {
-	// 	c.XML(http.StatusOK, NewTextMessage("格式输入有误，正确格式：as songname", c))
-	// 	return
-	// }
-	qlist, err := model.ListQuestions()
-	if err != nil {
-		log.ErrorWithRecord("ListQuestions failed, err=", err)
-		c.XML(http.StatusOK, NewTextMessage("抱歉，目前出了点状况，请联系小林同学", c))
-		return
-	}
-
-	var content string
-	for _, q := range qlist {
-		content := "Q" + q.QuestionID + ":" + q.Question + "\n"
-		content += "\n- - - - - - - - - - - - - - - - - - - - \n"
-		content += q.Answer
-		content += "\n\n"
-	}
-
-	c.XML(http.StatusOK, NewTextMessage(content, c))
-}
-
-func listSongHandler(c *gin.Context, args ...string) {
-	name := ""
-	if len(args) >= 2 {
-		name = args[1]
-	}
-	songs, err := model.ListSongs(name, 0)
-	if err != nil {
-		c.XML(http.StatusOK, NewTextMessage("ListSongs Err,err="+err.Error(), c))
-		return
-	}
-	content := fmt.Sprintf("共计有%d条歌曲\n", len(songs))
-	for _, song := range songs {
-		content += describeSong(song)
-	}
-	c.XML(http.StatusOK, NewTextMessage(content, c))
-}
-
 func listUsersHandler(c *gin.Context, args ...string) {
 	users, err := model.ListWxUsers()
 	if err != nil {
@@ -179,6 +145,73 @@ func listUsersHandler(c *gin.Context, args ...string) {
 	c.XML(http.StatusOK, NewTextMessage(res, c))
 }
 
+func todoController(c *gin.Context, args ...string) {
+	if len(args) == 0 {
+		c.XML(http.StatusOK, NewTextMessage("todo needs ls/add/fin/del/mod", c))
+		return
+	}
+
+	if args[0] == "ls" {
+		items, err := model.ListTodoItems(model.TODO_ALL)
+		if err != nil {
+			c.XML(http.StatusOK, NewTextMessage("ListTodoItems failer,err="+err.Error(), c))
+			return
+		}
+		content := describeTodos(items)
+		c.XML(http.StatusOK, NewTextMessage(content, c))
+		return
+	} else if args[0] == "fin" {
+		if len(args) < 2 {
+			c.XML(http.StatusOK, NewTextMessage("todo fin+id", c))
+			return
+		}
+		id, err := strconv.ParseInt(args[1], 10, 32)
+		if err != nil {
+			c.XML(http.StatusOK, NewTextMessage("todo parse arg2 failed,err="+err.Error(), c))
+			return
+		}
+		err = model.UpdateTodoFinish(int(id), 1)
+		if err != nil {
+			c.XML(http.StatusOK, NewTextMessage("todo update finish state failed,err="+err.Error(), c))
+			return
+		}
+		c.XML(http.StatusOK, NewTextMessage("todo finish success", c))
+	} else if args[0] == "add" {
+		if len(args) >= 2 {
+			info := ""
+			for i := 1; i < len(args); i++ {
+				info += args[i] + " "
+			}
+			if err := model.CreateTodoItems(model.TodoItem{ItemInfo: info}); err != nil {
+				c.XML(http.StatusOK, NewTextMessage("add todo failed,err="+err.Error(), c))
+			} else {
+				c.XML(http.StatusOK, NewTextMessage("add todo success!", c))
+			}
+			return
+		} else {
+			c.XML(http.StatusOK, NewTextMessage("正确格式：todo add xxxxx", c))
+			return
+		}
+	}
+}
+
+//订阅某人的最近输入
+//目前只针对Important
+func subscribeController(c *gin.Context, args ...string) {
+	if len(args) == 0 {
+		c.XML(http.StatusOK, NewTextMessage("sub needs name, like:sub 张三", c))
+		return
+	}
+}
+
+//查看记仇小本本
+func rememberController(c *gin.Context, args ...string) {
+	if len(args) == 0 {
+		c.XML(http.StatusOK, NewTextMessage("remeber ls", c))
+		return
+	}
+}
+
 /* ------------------------ 以下为Important用户的handler ----------------------------*/
 
 func getNextUser() *model.WxUser {
@@ -197,7 +230,7 @@ func getNextUser() *model.WxUser {
 //TODO:每天只能看5个
 func qaHandler(c *gin.Context, args ...string) {
 	cmd := args[0]
-	if cmd == "1" {
+	if cmd == imporQACmd {
 		qlist, err := model.ListQuestions()
 		if err != nil {
 			log.ErrorWithRecord("ListQuestions failed, err=", err)
@@ -206,8 +239,6 @@ func qaHandler(c *gin.Context, args ...string) {
 		}
 		if len(qlist) == 0 {
 			content := "你已经看完了所有的Q&A啦~\n"
-			content += "本意是想你看完后，这里会提示那现在就把舞台交给身边的林同学吧，可惜搞砸了哈哈\n"
-			content += "不过也算是把想说的话都说啦，看到这里应该也不早了，拖延症，你是不是也该去洗洗睡了\n"
 			c.XML(http.StatusOK, NewTextMessage(content, c))
 			return
 		}
@@ -233,9 +264,48 @@ func qaHandler(c *gin.Context, args ...string) {
 	}
 }
 
+func describeTodo(item model.TodoItem) string {
+	num := fmt.Sprint(item.ID)
+	finish := fmt.Sprintf("(%d/1)", item.FinishState)
+	content := "\t" + num + "." + item.ItemInfo + " " + finish + "\n"
+	return content
+}
+
+func describeTodos(items []model.TodoItem) string {
+	sort.Slice(items, func(i, j int) bool {
+		if items[i].FinishState > items[j].FinishState {
+			return true
+		} else if items[i].FinishState < items[j].FinishState {
+			return false
+		} else {
+			return items[i].ID < items[j].ID
+		}
+	})
+	nofinishCount := 0
+	finishCount := 0
+	seperator := false
+	content := "当前有以下待做清单：\n"
+	for _, todo := range items {
+		if todo.FinishState > 0 {
+			finishCount++
+			seperator = false
+		} else {
+			nofinishCount++
+			if !seperator {
+				content += "\n- - - - - - - - - - - - - - - - - - - - \n"
+			}
+			seperator = true
+		}
+		content += describeTodo(todo)
+	}
+	content += "\n- - - - - - - - - - - - - - - - - - - - \n"
+	content += fmt.Sprintf("目前已经完成了%d件待做事项，还有%d件待做事项等待完成哦，一起加油吧~\n", finishCount, nofinishCount)
+	return content
+}
+
 func todoListHandler(c *gin.Context, args ...string) {
 	cmd := args[0]
-	if cmd == "2" {
+	if cmd == imporTodoCmd {
 		todolist, err := model.ListTodoItems(model.TODO_ALL)
 		if err != nil {
 			log.ErrorWithRecord("ListTodoItems failed, err=", err)
@@ -246,21 +316,7 @@ func todoListHandler(c *gin.Context, args ...string) {
 			c.XML(http.StatusOK, NewTextMessage("当前还没有待做的事项清单哦~", c))
 			return
 		}
-		nofinishCount := 0
-		finishCount := 0
-		content := "当前有以下待做清单：\n"
-		for _, todo := range todolist {
-			if todo.FinishState > 0 {
-				finishCount++
-			} else {
-				nofinishCount++
-			}
-			num := fmt.Sprint(todo.ID)
-			finish := fmt.Sprintf("(%d/1)", todo.FinishState)
-			content += "\t" + num + "." + todo.ItemInfo + " " + finish + "\n"
-		}
-		content += "\n- - - - - - - - - - - - - - - - - - - - \n"
-		content += fmt.Sprintf("目前已经完成了%d件待做事项，还有%d件待做事项等待完成哦，一起加油吧~\n", finishCount, nofinishCount)
+		content := describeTodos(todolist)
 		content += "\nTips：回复21+待做事项可以补充清单\n"
 		content += "(例如：21 一起看日出"
 		c.XML(http.StatusOK, NewTextMessage(content, c))
@@ -268,7 +324,7 @@ func todoListHandler(c *gin.Context, args ...string) {
 	} else {
 		substrs := strings.Split(args[0], " ")
 		subcmd := substrs[0]
-		if subcmd == "21" {
+		if subcmd == imporTodoCmd+"1" {
 			if len(substrs) >= 2 {
 				info := ""
 				for i := 1; i < len(substrs); i++ {
@@ -494,66 +550,18 @@ func describeSong(song model.Song) string {
 	return content
 }
 
-func musicRecoHandler(c *gin.Context, args ...string) {
-
-	cmd := args[0]
-	if cmd == "6" {
-		songs, err := model.ListRootSongs(10)
-		if err != nil {
-			log.ErrorWithRecord("ListRootSongs failed,err=", err)
-			c.XML(http.StatusOK, NewTextMessage("暂无歌曲分享~", c))
-			return
-		}
-		content := "最近有人在听：\n"
-		for _, song := range songs {
-			content += describeSong(song)
-		}
-		content += "\n- - - - - - - - - - - - - - - - - - - - \n"
-		content += "可以分享你最近在听的歌哦~，输入61+歌名即可，例如：61 惊鸿一瞥"
-		c.XML(http.StatusOK, NewTextMessage(content, c))
-		return
-	} else {
-		substrs := strings.Split(cmd, " ")
-		subcmd := substrs[0]
-		if subcmd == "61" {
-			if len(substrs) >= 2 {
-				songName := ""
-				for i := 1; i < len(substrs); i++ {
-					songName += substrs[i] + " "
-				}
-				if err := addSong(songName); err != nil {
-					log.ErrorWithRecord("addSong failed, err=", err)
-					c.XML(http.StatusOK, NewTextMessage("我暂时出了点问题，请联系一下小林同学", c))
-				} else {
-					content := "分享歌曲成功\n"
-					content += "输入62可查看自己分享过的歌曲"
-					c.XML(http.StatusOK, NewTextMessage(content, c))
-				}
-				return
-			} else {
-				log.ErrorWithRecord("add song failed by wrong format, msg=", cmd)
-				c.XML(http.StatusOK, NewTextMessage("正确格式：61 歌名(61 歌名之间都有空格)", c))
-				return
-			}
-		} else if subcmd == "62" {
-			songs, err := model.ListSongs(GetUserNameFromCtx(c), 0)
-			if err != nil {
-				log.ErrorWithRecord("ListRootSongs failed,err=", err)
-				c.XML(http.StatusOK, NewTextMessage("暂无分享歌曲~", c))
-				return
-			}
-			content := "你最近分享了：\n"
-			for _, song := range songs {
-				content += describeSong(song)
-			}
-			c.XML(http.StatusOK, NewTextMessage(content, c))
-			return
-		}
-	}
-}
-
 func coldjokeHandler(c *gin.Context, args ...string) {
 	c.XML(http.StatusOK, NewTextMessage("给你看星星：我好想你能看到星星", c))
+}
+
+//记仇小本本
+func remeberHandler(c *gin.Context, args ...string) {
+
+}
+
+//书单推荐
+func bookHandler(c *gin.Context, args ...string) {
+
 }
 
 func rootCmdAnalyze(c *gin.Context, content string) {
