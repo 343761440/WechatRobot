@@ -1,9 +1,9 @@
 package common
 
 const (
-	kConfigPath       = "./config"
+	kConfigPath       = "/myapp/config"
 	kCommonConfigName = "common-config"
-	kCommonConfigPath = "./config/common-config.ini"
+	kCommonConfigPath = "/myapp/config/common-config.ini"
 )
 
 //export

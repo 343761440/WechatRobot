@@ -1,0 +1,54 @@
+# ------------------- wxmanager Deployment ------------------- #
+---
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  labels:
+    k8s-app: {{.Release.Name}}-wxmanager
+  name: {{.Release.Name}}-wxmanager
+spec:
+  replicas: {{.Values.wxmanager.deployment.replicas}}
+  selector:
+    matchLabels:
+      k8s-app: {{.Release.Name}}-wxmanager
+  template:
+    metadata:
+      labels:
+        k8s-app: {{.Release.Name}}-wxmanager
+    spec:
+      containers:
+      - name: wxmanager
+        image: {{.Values.wxmanager.deployment.imageVersion}}
+        securityContext:
+          privileged: true
+        imagePullPolicy: IfNotPresent
+        command: ["/myapp/wxmanager"]
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /ping
+            port: 80
+            scheme: HTTP
+          initialDelaySeconds: 10
+          periodSeconds: 60
+          successThreshold: 1
+          timeoutSeconds: 1
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /ping
+            port: 80
+            scheme: HTTP
+          initialDelaySeconds: 10
+          periodSeconds: 60
+          successThreshold: 1
+          timeoutSeconds: 1
+        volumeMounts:
+        - name: common-config
+          mountPath: /myapp/config
+      volumes:
+      - name: common-config
+        configMap:
+          defaultMode: 420
+          name: common-config
+
