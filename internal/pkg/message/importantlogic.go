@@ -31,11 +31,11 @@ const (
 var (
 	gImportantDescribes = map[string]KeyWordInfo{
 		//imporQACmd:     {"真心话环节", qaHandler},
-		imporTodoCmd:   {"要做的xx件事", todoListDescriber},
-		imporWeathCmd:  {"实时天气", weatherDescriber},
-		imporMovieCmd:  {"电影推荐", movieRecoDescriber},
-		imporRandomCmd: {"随机匣子", coldjokeDescriber},
-		imporRmbCmd:    {"记仇小本本", jcDescriber},
+		imporTodoCmd:   {"要做的xx件事/:,@f", todoListDescriber},
+		imporWeathCmd:  {"实时天气/:sun", weatherDescriber},
+		imporMovieCmd:  {"电影推荐/:circle", movieRecoDescriber},
+		imporRandomCmd: {"随机匣子/:gift", coldjokeDescriber},
+		imporRmbCmd:    {"记仇小本本/:,@x", jcDescriber},
 		//imporBookCmd: {"书单推荐", bookDescriber},
 	}
 	gImportantHandlers = map[string]KeyWordHandle{
@@ -377,16 +377,23 @@ func jcDescriber(c *gin.Context, args ...string) {
 	content := name + "打开了记仇小本本......\n"
 	content += "记仇小本本操作方法:"
 	content += "\n- - - - - - - - - - - - - - - - - - - - \n"
-	content += "写小本本：记仇 增加 xxxx\n例如：记仇 增加 2021.12.13,小林审美不行"
+	content += "写小本本：记仇 增加 xxxx\n例如：记仇 增加 小林审美不行···"
 	content += "\n- - - - - - - - - - - - - - - - - - - - \n"
 	content += "显示小本本：记仇 罗列"
 	content += "\n- - - - - - - - - - - - - - - - - - - - \n"
-	content += "修改小本本：记仇 修改 事件id 事件内容\n例如：记仇 修改 3 2021.12.13,小林审美是真的不行\n"
+	content += "修改小本本：记仇 修改 ID 内容\n例如：1. 小林在xxx写下:天气真好\n记仇 修改 1 天气真不好\n"
 	c.XML(http.StatusOK, NewTextMessage(content, c))
 }
 
 func describeJcEvent(jes ...model.JcEvent) string {
 	content := ""
+	sort.Slice(jes, func(i, j int) bool {
+		if strings.Compare(jes[i].Author, jes[j].Author) < 0 {
+			return false
+		} else {
+			return true
+		}
+	})
 	for _, je := range jes {
 		content += fmt.Sprintf("%d.%s在%s写下:\n%s", je.ID, je.Author, je.CreatedAt.Format("2006-01-02 15:04"), je.Event)
 		content += "\n- - - - - - - - - - - - - - - - - - - - \n"
@@ -424,7 +431,11 @@ func jcController(c *gin.Context, args ...string) {
 		c.XML(http.StatusOK, NewTextMessage("添加到小本本成功！", c))
 		return
 	} else if cmd == "罗列" {
-		jcs, err := model.ListJCEvent()
+		author := ""
+		if len(args) >= 2 {
+			author = args[1]
+		}
+		jcs, err := model.ListJCEvent(author)
 		if err != nil {
 			log.ErrorWithRecord("ListJCEvent failed, err=", err)
 			c.XML(http.StatusOK, NewTextMessage("我暂时出了点问题，请联系一下林同学~", c))
@@ -452,7 +463,7 @@ func jcController(c *gin.Context, args ...string) {
 		}
 
 		if jc.Author != userName {
-			c.XML(http.StatusOK, NewTextMessage("无法修改他人记录的事件哦~", c))
+			c.XML(http.StatusOK, NewTextMessage("无法修改他人的小本本哦~", c))
 			return
 		}
 

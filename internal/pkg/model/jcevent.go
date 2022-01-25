@@ -8,9 +8,13 @@ type JcEvent struct {
 	Event  string
 }
 
-func ListJCEvent() ([]JcEvent, error) {
+func ListJCEvent(author string) ([]JcEvent, error) {
 	var res []JcEvent
-	err := GetInstance().db.Model(&JcEvent{}).Find(&res).Error
+	query := GetInstance().db.Model(&JcEvent{}).Debug()
+	if len(author) > 0 {
+		query = query.Where("author=?", author)
+	}
+	err := query.Find(&res).Error
 	return res, err
 }
 
